@@ -31,7 +31,7 @@ const waiters = new Map();
 
 function getWorker() {
   if (worker) return worker;
-  worker = new Worker(new URL('./whisper-worker.js?v=202611011037', import.meta.url), { type: 'module' });
+  worker = new Worker(new URL('./whisper-worker.js?v=202611011045', import.meta.url), { type: 'module' });
   worker.onmessage = ({ data }) => {
     const w = waiters.get(data.id);
     if (!w) return;

@@ -1,9 +1,9 @@
 // Kopia i synchronizacja z repozytorium GitHub (domyślnie gchrupala/app-data) przez REST API.
 // Układ w repo (jak w innych aplikacjach): <profil>/dziennik.json (wszystkie wpisy, metadane),
 // <profil>/dziennik.md (czytelny raport), <profil>/dziennik/<data>_<id>/<pliki> (nagrania, zdjęcia, dokumenty).
-import * as db from './db.js?v=202611011037';
-import { describeWeather, groupFragments } from './context.js?v=202611011037';
-import { describeMethods } from './recorder.js?v=202611011037';
+import * as db from './db.js?v=202611011045';
+import { describeWeather, groupFragments } from './context.js?v=202611011045';
+import { describeMethods } from './recorder.js?v=202611011045';
 
 const K = { token: 'dziennik.gh.token', repo: 'dziennik.gh.repo', profile: 'dziennik.gh.profile', last: 'dziennik.gh.last', deleted: 'dziennik.deleted' };
 const ls = {
@@ -101,7 +101,11 @@ async function localFiles(f) {
     const a = await db.getFile(f.audioId);
     if (a) out.push({ id: a.id, kind: 'audio', name: a.name, type: a.type, size: a.size });
   }
-  for (const a of f.attachments || []) out.push({ id: a.id, kind: a.kind, name: a.name, type: a.type, size: a.size });
+  for (const a of f.attachments || []) {
+    out.push({ id: a.id, kind: a.kind, name: a.name, type: a.type, size: a.size });
+    // JPEG do wyświetlania zdjęcia HEIC (w repo obok oryginału; raport MD go pokazuje)
+    if (a.preview) out.push({ ...a.preview, kind: 'preview', of: a.id });
+  }
   return out;
 }
 
@@ -154,7 +158,10 @@ function bodyLines(f) {
   if (f.notes) lines.push(f.notes, '');
   for (const file of f.files || []) {
     const p = mdLink(file.path);
-    if (file.kind === 'photo') lines.push(`![${file.name}](${p})`);
+    if (file.kind === 'preview') continue;
+    const preview = f.files.find((x) => x.kind === 'preview' && x.of === file.id);
+    if (file.kind === 'photo' && preview) lines.push(`[![${file.name}](${mdLink(preview.path)})](${p})`);
+    else if (file.kind === 'photo') lines.push(`![${file.name}](${p})`);
     else lines.push(`- ${file.kind === 'audio' ? '🎙 nagranie' : '📄'} [${file.name}](${p})`);
   }
   if (f.files?.length) lines.push('');
@@ -217,7 +224,7 @@ async function runSync(attempt = 0) {
       const remoteFiles = remoteById.get(f.id)?.files || [];
       const already = new Map(remoteFiles.map((x) => [x.id, x]));
       // Decydują metadane wpisu, nie obecność blobu (brak pobranego pliku nie może go skasować w repo).
-      const keep = new Set([f.audioId, ...(f.attachments || []).map((a) => a.id)].filter(Boolean));
+      const keep = new Set([f.audioId, ...(f.attachments || []).flatMap((a) => [a.id, a.preview?.id])].filter(Boolean));
       removed.push(...remoteFiles.filter((x) => !keep.has(x.id)));
       const files = [];
       for (const meta of await localFiles(f)) {

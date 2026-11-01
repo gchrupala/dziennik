@@ -1,4 +1,4 @@
-# Dziennik podróży — wskazówki dla Claude
+# Dziennik — wskazówki dla Claude
 
 ## Sposób pracy
 
@@ -30,7 +30,8 @@ Szczegóły wpisu otwierają się do czytania (bez pól, bez usuwania); „✎ E
 Nowy wpis bez nagrania otwiera się od razu w edycji.
 Grupa i dzień to widoki do czytania: wszystkie wpisy po kolei z nagraniami, tekstem, zdjęciami i dokumentami
 (pliki wczytywane przy przewinięciu, IntersectionObserver). Karta w grupie i nagłówek grupy prowadzą do widoku grupy,
-nagłówek dnia na liście do widoku dnia. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
+nagłówek dnia na liście do widoku dnia. Ikona udostępniania (widoki do czytania): Web Share API z tekstem
+(data, godziny, miejsce, pogoda, transkrypcje, notatki) i zdjęciami (JPEG); bez Web Share — kopia tekstu do schowka. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
 
 Można też utworzyć wpis bez nagrania (sama notatka/zdjęcia + lokalizacja i pogoda).
 Dane są lokalnie w przeglądarce (IndexedDB) i synchronizują się z prywatnym repo **`gchrupala/app-data`**
@@ -58,6 +59,8 @@ js/recorder.js        RecordingSession: MediaRecorder + SpeechRecognition (auto-
 js/whisper.js         Whisper: pobieranie/wybór modelu, kolejka transkrypcji, dekodowanie i cięcie nagrań
 js/whisper-worker.js  worker z transformers.js (import z jsDelivr, wersja przypięta)
 js/pcm-worklet.js     AudioWorklet zbierający próbki 16 kHz dla Whispera
+js/photos.js          podglądy JPEG zdjęć HEIC/HEIF (oryginał zostaje), `ensurePreviews()`, `displayFile()`
+js/heic-worker.js     worker: dekodowanie HEIC (heic-to/libheif), zmniejszenie do 2048 px, JPEG
 js/sync.js            synchronizacja z GitHub (app-data)
 js/context.js         lokalizacja, odwrotne geokodowanie, pogoda, uzupełnianie braków
 js/db.js              IndexedDB: store `fragments` (metadane) i `files` (bloby: audio, zdjęcia, dokumenty)
@@ -73,15 +76,17 @@ kind ('audio'|'text'), appVersion, autoStopSec, langs[], transcript, transcribed
 `processLocally`), `live-whisper:<model>` (na żywo, Whisper), `whisper:<model>` (po nagraniu, cały plik; zastępuje
 wcześniejsze), `manual` (poprawka ręczna); opis w `describeMethods()` (`js/recorder.js`), widoczny w szczegółach i w raporcie MD.
 `transcribing: true` = Whisper kończy w tle (pole tylko do odczytu); po restarcie aplikacji nagranie jest transkrybowane od nowa.
-`attachments` trzyma tylko metadane (`id, kind ('photo'|'document'), name, type, size`); bloby są w `files`.
+`attachments` trzyma tylko metadane (`id, kind ('photo'|'document'), name, type, size, preview?`); bloby są w `files`.
+Zdjęcie HEIC dostaje `preview: {id, name, type: 'image/jpeg', size}` (plik `kind: 'preview'` w `files`, w repo obok oryginału,
+w `dziennik.json` jako plik z `kind: 'preview', of: <id zdjęcia>`). Podglądy powstają w tle przy starcie, po dodaniu zdjęcia i po powrocie internetu.
 Nagranie kończy się samo po ciszy (domyślnie 60 s, Ustawienia → Nagrywanie; `dziennik.autoStop` w localStorage,
 ostatnie 10 s z odliczaniem). Poziom mowy liczony z bloków AudioWorklet (`silentMs()` w `js/recorder.js`; mowa = 3 z 4 bloków 0,25 s powyżej 0,02, krótkie stuknięcia się nie liczą), bo działają też przy wygaszonym ekranie.
 Audio jest zapisywane co 10 s w trakcie nagrania, więc przerwane nagranie nie przepada (status `interrupted`).
 
 ## Konwencje
 
-- Czysty JavaScript (moduły ES), **bez kroku budowania i bez zależności npm**. Jedyny zewnętrzny kod: transformers.js z jsDelivr
-  (przypięta wersja w `js/whisper-worker.js`; ONNX Runtime WASM i model są cache'owane przez samą bibliotekę).
+- Czysty JavaScript (moduły ES), **bez kroku budowania i bez zależności npm**. Jedyny zewnętrzny kod z jsDelivr (wersje przypięte):
+  transformers.js (`js/whisper-worker.js`; ONNX Runtime WASM i model cache'owane przez bibliotekę) i heic-to (`js/heic-worker.js`).
 - Interfejs po polsku.
 - Zmiana schematu IndexedDB → podbij `VERSION` w `js/db.js` i dopisz migrację w `onupgradeneeded`.
 - **Wersjonowanie:** przed każdym commitem zmieniającym pliki aplikacji uruchom `tools/bump-version.sh`.

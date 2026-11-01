@@ -110,6 +110,8 @@ export async function removeAttachment(fragmentId, fileId) {
     s.fragments.get(fragmentId).onsuccess = (e) => {
       const f = e.target.result;
       if (!f) return;
+      const preview = (f.attachments || []).find((a) => a.id === fileId)?.preview;
+      if (preview) s.files.delete(preview.id); // podgląd JPEG zdjęcia HEIC
       s.fragments.put({ ...f, attachments: (f.attachments || []).filter((a) => a.id !== fileId), updatedAt: Date.now() });
     };
   });

@@ -1,10 +1,11 @@
-import * as db from './db.js?v=202611011037';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011037';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011037';
-import * as whisper from './whisper.js?v=202611011037';
-import * as sync from './sync.js?v=202611011037';
+import * as db from './db.js?v=202611011045';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011045';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011045';
+import * as whisper from './whisper.js?v=202611011045';
+import * as sync from './sync.js?v=202611011045';
+import * as pics from './photos.js?v=202611011045';
 
-const APP_VERSION = '202611011037'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011045'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -395,6 +396,8 @@ async function refreshContext(id) {
   if (f && el && currentId === id) {
     el.innerHTML = contextHtml(f);
     refreshTranscript(f);
+    const ph = $('#photos');
+    if (ph && ph.dataset.key !== attachmentsKey(f)) renderAttachments(f);
   }
 }
 
@@ -559,7 +562,7 @@ function renderReading(f) {
         <div class="detail-time">${esc(timeFmt.format(f.createdAt))}${f.durationMs ? ` · 🎙 ${fmtDuration(f.durationMs)}` : ''}</div>
         ${f.status === 'interrupted' ? '<span class="badge warn">Nagranie przerwane — zapisano to, co się udało</span>' : ''}
       </div>
-      <button type="button" class="btn small" id="edit">✎ Edytuj</button>
+      <div class="detail-actions">${shareBtn()}<button type="button" class="btn small" id="edit">✎ Edytuj</button></div>
     </div>
     <section class="context" id="context">${contextHtml(f)}</section>
     ${f.audioId ? '<section class="block"><div id="audio-slot" class="muted">Wczytuję…</div></section>' : ''}
@@ -579,9 +582,78 @@ function renderReading(f) {
     editing = true;
     renderDetail(id);
   });
+  $('#share', view).addEventListener('click', async () => {
+    const cur = await db.getFragment(id);
+    if (cur) shareGroups([[cur]]);
+  });
   if (f.audioId) renderAudio(f);
   renderAttachments(f);
   refreshTranscript(f);
+}
+
+// ---------- udostępnianie (widoki do czytania) ----------
+const SHARE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 15 7c0 .3 0 .5.1.8L8.4 11.2a3 3 0 1 0 0 3.6l6.7 3.4A3 3 0 1 0 18 16z"/></svg>';
+const shareBtn = () => `<button type="button" class="icon-btn" id="share" aria-label="Udostępnij" title="Udostępnij">${SHARE_ICON}</button>`;
+const MAX_SHARE_FILES = 20;
+
+const groupTime = (g) => (g.length > 1
+  ? `${timeFmt.format(g[0].createdAt)}–${timeFmt.format(g.at(-1).createdAt)}`
+  : timeFmt.format(g[0].createdAt));
+
+function groupTextHead(g) {
+  const placed = g.find((f) => f.location?.place || f.location?.lat != null);
+  const w = g.find((f) => hasWeather(f.weather))?.weather;
+  return [
+    [groupTime(g), placed && placeShort(placed.location)].filter(Boolean).join(' — '),
+    w && `${weatherShort(w)}, ${describeWeather(w).text.toLowerCase()}`,
+  ].filter(Boolean).join('\n');
+}
+
+function entryText(f, withTime) {
+  if (!f.transcript?.trim() && !f.notes?.trim()) return ''; // sama godzina nic nie mówi
+  return [
+    withTime && timeFmt.format(f.createdAt),
+    f.transcript?.trim(),
+    f.notes?.trim(),
+  ].filter(Boolean).join('\n');
+}
+
+// Tekst grup wpisów: nagłówek dnia, potem każda grupa (godziny, miejsce, pogoda) i jej wpisy.
+function shareText(groups) {
+  const parts = [dayFmt.format(groups[0][0].createdAt).replace(/^./, (c) => c.toUpperCase())];
+  for (const g of groups) {
+    parts.push(groupTextHead(g));
+    for (const f of g) {
+      const t = entryText(f, g.length > 1);
+      if (t) parts.push(t);
+    }
+  }
+  return parts.join('\n\n');
+}
+
+async function shareGroups(groups) {
+  const text = shareText(groups);
+  const title = `Dziennik — ${dayFmt.format(groups[0][0].createdAt)}`;
+  if (!navigator.share) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Skopiowano tekst do schowka.');
+    } catch {
+      toast('Udostępnianie nie jest dostępne w tej przeglądarce.');
+    }
+    return;
+  }
+  const files = [];
+  for (const a of groups.flat().flatMap((f) => f.attachments).filter((x) => x.kind === 'photo').slice(0, MAX_SHARE_FILES)) {
+    const file = await pics.displayFile(a);
+    if (file) files.push(new File([file.blob], file.name || a.name, { type: file.type || file.blob.type }));
+  }
+  try {
+    if (files.length && navigator.canShare?.({ files, text })) await navigator.share({ title, text, files });
+    else await navigator.share({ title, text });
+  } catch (err) {
+    if (err?.name !== 'AbortError') toast(`Nie udało się udostępnić: ${err.message}`);
+  }
 }
 
 // ---------- czytanie grupy i całego dnia ----------
@@ -612,7 +684,7 @@ function entryHtml(f) {
     ${f.kind === 'audio' ? `<div class="read-text transcript-read">${readHtml(f.transcript, f.transcribing ? '⏳ Transkrypcja w toku…' : 'Brak transkrypcji.')}</div>` : ''}
     ${f.notes?.trim() ? `<div class="read-text entry-notes">${readHtml(f.notes, '')}</div>` : ''}
     ${!f.transcript?.trim() && !f.notes?.trim() && !f.attachments.length && f.kind !== 'audio' ? '<p class="muted">(pusty wpis)</p>' : ''}
-    ${photos.length ? `<div class="photos">${photos.map((a) => `<figure class="photo" data-lazy="photo" data-file="${esc(a.id)}" data-name="${esc(a.name)}"></figure>`).join('')}</div>` : ''}
+    ${photos.length ? `<div class="photos">${photos.map((a) => `<figure class="photo" data-lazy="photo" data-file="${esc(a.preview?.id || a.id)}" data-name="${esc(a.name)}"${!a.preview && pics.isHeic(a) ? ` data-heic="${esc(a.id)}"` : ''}></figure>`).join('')}</div>` : ''}
     ${docs.length ? `<ul class="docs">${docs.map((a) => `<li data-lazy="doc" data-file="${esc(a.id)}">📄 ${esc(a.name)} <span class="muted">${fmtSize(a.size)}</span></li>`).join('')}</ul>` : ''}
   </article>`;
 }
@@ -639,12 +711,13 @@ async function renderSequence(r) {
     return;
   }
   seqIds = new Set(shown.flat().map((f) => f.id));
+  const ids = [...seqIds];
   const count = shown.flat().length;
   view.innerHTML = `
     <div class="detail-head"><div>
       <div class="detail-date">${esc(title)}</div>
       <div class="detail-time">${r.view === 'group' ? groupHeadHtml(shown[0]) : esc(entriesLabel(count))}</div>
-    </div></div>
+    </div>${shareBtn()}</div>
     ${shown.map((g) => `<section class="seq-group">
       ${r.view === 'day' ? `<h3 class="seq-group-head">${groupHeadHtml(g)}</h3>` : ''}
       ${g.map(entryHtml).join('')}
@@ -657,6 +730,12 @@ async function renderSequence(r) {
     }
   }, { rootMargin: '600px 0px' });
   view.querySelectorAll('[data-lazy]').forEach((el) => seqObserver.observe(el));
+  $('#share', view).addEventListener('click', async () => {
+    // Aktualne dane (np. transkrypcja dokończona w tle), z zachowaniem podziału na grupy.
+    const fresh = new Map((await Promise.all(ids.map((i) => db.getFragment(i)))).filter(Boolean).map((f) => [f.id, f]));
+    const groupsNow = shown.map((g) => g.map((f) => fresh.get(f.id)).filter(Boolean)).filter((g) => g.length);
+    if (groupsNow.length) shareGroups(groupsNow);
+  });
   const target = scrollTarget && document.getElementById(`e-${scrollTarget}`);
   scrollTarget = null;
   if (target) target.scrollIntoView();
@@ -686,9 +765,19 @@ async function loadLazy(el) {
 
 // Whisper skończył w tle — uaktualnij tekst w widoku grupy/dnia.
 async function refreshSeqEntry(id) {
-  const el = document.querySelector(`#e-${CSS.escape(id)} .transcript-read`);
-  const f = el && await db.getFragment(id);
-  if (f && el.isConnected) el.innerHTML = readHtml(f.transcript, f.transcribing ? '⏳ Transkrypcja w toku…' : 'Brak transkrypcji.');
+  const entry = document.getElementById(`e-${id}`);
+  const f = entry && await db.getFragment(id);
+  if (!f) return;
+  // Powstał podgląd JPEG zdjęcia HEIC — pokaż go.
+  for (const fig of entry.querySelectorAll('[data-heic]')) {
+    const a = f.attachments.find((x) => x.id === fig.dataset.heic);
+    if (!a?.preview) continue;
+    fig.removeAttribute('data-heic');
+    fig.dataset.file = a.preview.id;
+    loadLazy(fig);
+  }
+  const el = entry.querySelector('.transcript-read');
+  if (el?.isConnected) el.innerHTML = readHtml(f.transcript, f.transcribing ? '⏳ Transkrypcja w toku…' : 'Brak transkrypcji.');
 }
 
 $('#view-detail').addEventListener('click', (e) => {
@@ -722,6 +811,9 @@ function fixDuration(audio) {
   }, { once: true });
 }
 
+// Zmienia się, gdy dojdzie/zniknie załącznik albo powstanie podgląd JPEG zdjęcia HEIC.
+const attachmentsKey = (f) => f.attachments.map((a) => `${a.id}:${a.preview?.id || ''}`).join(',');
+
 async function renderAttachments(f) {
   const photosEl = $('#photos');
   const docsEl = $('#docs');
@@ -730,9 +822,10 @@ async function renderAttachments(f) {
   attachmentUrls = [];
   const items = [];
   for (const a of f.attachments) {
-    const file = await db.getFile(a.id);
+    const file = a.kind === 'photo' ? await pics.displayFile(a) : await db.getFile(a.id);
     if (file) items.push({ ...a, url: URL.createObjectURL(file.blob) });
   }
+  photosEl.dataset.key = attachmentsKey(f);
   if (currentId !== f.id) return items.forEach((i) => URL.revokeObjectURL(i.url));
   attachmentUrls = items.map((i) => i.url);
   photosEl.innerHTML = items.filter((i) => i.kind === 'photo').map((i) => `
@@ -786,6 +879,7 @@ async function addFiles(id, input, kind) {
   }
   const f = await db.getFragment(id);
   if (f) renderAttachments(f);
+  pics.ensurePreviews();
 }
 
 // ---------- autozapis pól tekstowych ----------
@@ -1086,7 +1180,8 @@ async function init() {
   sync.startAuto();
   await render();
   backfillContext();
-  window.addEventListener('online', () => backfillContext());
+  pics.ensurePreviews(); // podglądy JPEG zdjęć HEIC (biblioteka pobiera się raz, potem z cache)
+  window.addEventListener('online', () => { backfillContext(); pics.ensurePreviews(); });
   if ('serviceWorker' in navigator) {
     // Nowa wersja aplikacji przejęła stronę — przeładuj (chyba że trwa nagrywanie).
     const hadController = Boolean(navigator.serviceWorker.controller);

@@ -356,7 +356,8 @@ code { font-size: .9em; }
 /* ---------- czytanie / edycja ---------- */
 .read-text p { margin: 0 0 10px; line-height: 1.5; }
 .read-text p:last-child { margin-bottom: 0; }
-.detail-actions { display: flex; align-items: center; gap: 8px; }
+.detail-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.detail-actions .btn, .entry-head .btn { white-space: nowrap; }
 .edit-note { margin: 10px 0 0; padding: 6px 10px; border-radius: 8px; font-size: 13px; color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
