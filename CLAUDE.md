@@ -98,7 +98,10 @@ Prawdziwe `SpeechRecognition` w headless Chromium wywraca kartę — zawsze je m
 ## Znane ograniczenia
 
 - Transkrypcja na żywo działa w Chrome (Android/desktop) i Safari (iOS/macOS); Firefox nagrywa sam dźwięk.
-- Web Speech w Chrome wysyła dźwięk do Google — bez internetu działa tylko Whisper (o ile model jest pobrany).
+- Web Speech na Androidzie idzie przez systemową usługę mowy Google — działa offline, jeśli w telefonie są pobrane
+  języki offline (tak działa w MaxApkach). Dlatego aplikacja zawsze najpierw próbuje Web Speech, a Whisper włącza
+  dopiero po błędzie `network`. `SpeechRecognition.available({processLocally})` (moduł Chrome) na Androidzie
+  zwraca `unavailable` — to nie znaczy, że offline nie działa.
 - Whisper nie jest strumieniowy: tekst offline pojawia się co ~20–30 s; na wolnym telefonie (model small)
   może nie nadążać — kolejka kończy się po zatrzymaniu nagrania. Dodatkowo przycisk „Transkrybuj nagranie offline”.
 - Whisper „halucynuje” na ciszy — ciche fragmenty są pomijane; `max_new_tokens` ogranicza zapętlenia.

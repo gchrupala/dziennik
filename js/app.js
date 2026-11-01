@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611010340';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js?v=202611010340';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010340';
-import * as whisper from './whisper.js?v=202611010340';
-import * as sync from './sync.js?v=202611010340';
+import * as db from './db.js?v=202611010341';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js?v=202611010341';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010341';
+import * as whisper from './whisper.js?v=202611010341';
+import * as sync from './sync.js?v=202611010341';
 
-const APP_VERSION = '202611010340'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611010341'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -706,7 +706,7 @@ async function openSettings() {
   let html = '<h3>Transkrypcja bez internetu</h3><div id="whisper-settings"><p class="muted">…</p></div>';
   html += '<h3>Transkrypcja z internetem</h3>';
   html += speechSupported
-    ? '<p>Z internetem tekst pojawia się na żywo (rozpoznawanie mowy przeglądarki). Gdy połączenie zniknie w trakcie nagrania, aplikacja sama przełącza się na model offline.</p>'
+    ? '<p>Najpierw używane jest rozpoznawanie mowy przeglądarki — tekst pojawia się na żywo. Na Androidzie działa ono też bez internetu, jeśli w telefonie są pobrane języki offline (Ustawienia Androida → rozpoznawanie mowy / Mowa Google → języki offline: polski, hiszpański, angielski). Gdy rozpoznawanie zgłosi brak sieci, aplikacja sama przełącza się na model offline powyżej.</p>'
     : '<p class="muted">Ta przeglądarka nie ma rozpoznawania mowy na żywo — używany jest tylko model offline.</p>';
   html += '<div id="chrome-offline"></div>';
   html += `<h3>Kopia w GitHub</h3><div id="sync-settings">${syncSettingsHtml()}</div>`;

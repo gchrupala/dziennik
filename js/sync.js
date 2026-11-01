@@ -1,8 +1,8 @@
 // Kopia i synchronizacja z repozytorium GitHub (domyślnie gchrupala/app-data) przez REST API.
 // Układ w repo (jak w innych aplikacjach): <profil>/dziennik.json (wszystkie wpisy, metadane),
 // <profil>/dziennik.md (czytelny raport), <profil>/dziennik/<data>_<id>/<pliki> (nagrania, zdjęcia, dokumenty).
-import * as db from './db.js?v=202611010340';
-import { describeWeather } from './context.js?v=202611010340';
+import * as db from './db.js?v=202611010341';
+import { describeWeather } from './context.js?v=202611010341';
 
 const K = { token: 'dziennik.gh.token', repo: 'dziennik.gh.repo', profile: 'dziennik.gh.profile', last: 'dziennik.gh.last', deleted: 'dziennik.deleted' };
 const ls = {
