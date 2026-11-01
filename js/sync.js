@@ -1,8 +1,9 @@
 // Kopia i synchronizacja z repozytorium GitHub (domyślnie gchrupala/app-data) przez REST API.
 // Układ w repo (jak w innych aplikacjach): <profil>/dziennik.json (wszystkie wpisy, metadane),
 // <profil>/dziennik.md (czytelny raport), <profil>/dziennik/<data>_<id>/<pliki> (nagrania, zdjęcia, dokumenty).
-import * as db from './db.js?v=202611010941';
-import { describeWeather } from './context.js?v=202611010941';
+import * as db from './db.js?v=202611010943';
+import { describeWeather } from './context.js?v=202611010943';
+import { describeMethods } from './recorder.js?v=202611010943';
 
 const K = { token: 'dziennik.gh.token', repo: 'dziennik.gh.repo', profile: 'dziennik.gh.profile', last: 'dziennik.gh.last', deleted: 'dziennik.deleted' };
 const ls = {
@@ -124,7 +125,10 @@ function reportMd(fragments) {
       meta.push(`${w.icon} ${Math.round(f.weather.temperature)}°C, ${w.text.toLowerCase()}`);
     }
     if (meta.length) lines.push(meta.join(' · '), '');
-    if (f.transcript) lines.push(...f.transcript.split('\n').map((l) => `> ${l}`), '');
+    if (f.transcript) {
+      lines.push(...f.transcript.split('\n').map((l) => `> ${l}`), '');
+      if (f.transcribedBy?.length) lines.push(`*Transkrypcja: ${describeMethods(f.transcribedBy)}*`, '');
+    }
     if (f.notes) lines.push(f.notes, '');
     for (const file of f.files || []) {
       const p = mdLink(file.path);

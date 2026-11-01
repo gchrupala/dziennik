@@ -1,7 +1,7 @@
 // Nagrywanie dźwięku + równoczesna transkrypcja.
 // Z internetem: rozpoznawanie mowy przeglądarki (na żywo). Bez internetu: Whisper na urządzeniu
 // (dźwięk cięty na ~20–28 s fragmenty w miejscach ciszy, tekst pojawia się z kilkunastosekundowym opóźnieniem).
-import * as whisper from './whisper.js?v=202611010941';
+import * as whisper from './whisper.js?v=202611010943';
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -41,6 +41,29 @@ const SILENCE_RMS = 0.006; // fragment ciszy — nie wysyłamy do Whispera (unik
 const SPEECH_RMS = 0.03;   // poziom, przy którym zakładamy, że ktoś mówi
 const STALL_MS = 8000;     // tyle mowy bez żadnego wyniku = rozpoznawanie nie dostaje dźwięku
 
+// Sposoby powstania transkrypcji (pole `transcribedBy` wpisu), w kolejności pojawienia się.
+const whisperModel = () => (whisper.installedModel() || '').split('whisper-').pop() || 'whisper';
+export const METHOD = {
+  browser: 'live-browser',                        // na żywo, rozpoznawanie mowy przeglądarki
+  device: 'live-device',                          // na żywo, rozpoznawanie Chrome na urządzeniu (processLocally)
+  liveWhisper: () => `live-whisper:${whisperModel()}`, // na żywo (z opóźnieniem), Whisper
+  afterWhisper: () => `whisper:${whisperModel()}`,     // po nagraniu, Whisper na całym pliku
+  manual: 'manual',                               // poprawiona ręcznie
+};
+export function describeMethods(list) {
+  return (list || []).map((m) => {
+    const [kind, model] = m.split(':');
+    return {
+      'live-browser': 'na żywo (rozpoznawanie przeglądarki)',
+      'live-device': 'na żywo (rozpoznawanie na urządzeniu)',
+      'live-whisper': `na żywo (Whisper ${model})`,
+      whisper: `po nagraniu (Whisper ${model})`,
+      manual: 'poprawiona ręcznie',
+    }[kind] || m;
+  }).join(', ');
+}
+export const addMethod = (list, m) => [...(list || []).filter((x) => x !== m), m];
+
 const join = (...parts) => parts.map((p) => (p || '').trim()).filter(Boolean).join(' ');
 
 function pickMimeType() {
@@ -52,6 +75,7 @@ export class RecordingSession {
   constructor({ lang, onTranscript, onSpeechStatus, onLevel, onChunk }) {
     Object.assign(this, { lang, onTranscript, onSpeechStatus, onLevel, onChunk });
     this.langs = [lang];
+    this.methods = [];       // sposoby, które faktycznie dały tekst (METHOD)
     this.pieces = [];        // [{ t: ms od startu, text }] — tekst z obu silników, sortowany po czasie
     this.sessionFinal = '';  // finalne wyniki bieżącej sesji rozpoznawania przeglądarki
     this.interim = '';
@@ -76,6 +100,7 @@ export class RecordingSession {
   elapsed() { return performance.now() - this.startedAt; }
   emitTranscript() { this.onTranscript?.({ text: this.transcript, interim: this.interim, pending: this.pending }); }
   status(state, message = '') { this.onSpeechStatus?.(state, message); }
+  used(m) { if (!this.methods.includes(m)) this.methods.push(m); }
 
   // ---------- start / stop ----------
   async start() {
@@ -137,6 +162,7 @@ export class RecordingSession {
       durationMs,
       transcript: this.transcript,
       langs: this.langs,
+      methods: this.methods,
       pending: this.pending,
       stalled: Boolean(this.stalled), // rozpoznawanie przeglądarki nie dostawało dźwięku
       // Whisper może jeszcze kończyć ostatnie fragmenty — wynik końcowy:
@@ -181,7 +207,7 @@ export class RecordingSession {
       tick();
 
       if (this.audioCtx.sampleRate === SR16 && this.audioCtx.audioWorklet) {
-        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611010941', import.meta.url));
+        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611010943', import.meta.url));
         const node = new AudioWorkletNode(this.audioCtx, 'pcm-capture');
         node.port.onmessage = (e) => this.onPcm(e.data);
         source.connect(node);
@@ -230,7 +256,11 @@ export class RecordingSession {
     this.pending++;
     this.emitTranscript();
     const job = whisper.transcribe(audio, lang)
-      .then((text) => { if (text) this.pieces.push({ t, text }); })
+      .then((text) => {
+        if (!text) return;
+        this.pieces.push({ t, text });
+        this.used(METHOD.liveWhisper());
+      })
       .catch((err) => {
         console.warn('Whisper:', err);
         this.status('error', `Błąd transkrypcji offline: ${err.message}`);
@@ -301,6 +331,7 @@ export class RecordingSession {
         this.status(local ? 'local' : 'listening', local ? 'Transkrypcja offline (na urządzeniu).' : '');
       }
       this.srT ??= this.elapsed();
+      this.used(local ? METHOD.device : METHOD.browser);
       const finals = [];
       let interim = '';
       for (let i = 0; i < e.results.length; i++) {

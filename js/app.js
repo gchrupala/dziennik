@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611010941';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js?v=202611010941';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010941';
-import * as whisper from './whisper.js?v=202611010941';
-import * as sync from './sync.js?v=202611010941';
+import * as db from './db.js?v=202611010943';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, METHOD, describeMethods, addMethod } from './recorder.js?v=202611010943';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010943';
+import * as whisper from './whisper.js?v=202611010943';
+import * as sync from './sync.js?v=202611010943';
 
-const APP_VERSION = '202611010941'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611010943'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -179,7 +179,7 @@ function scheduleTranscriptSave() {
   clearTimeout(rec.saveTimer);
   const { id, session } = rec;
   rec.saveTimer = setTimeout(() => {
-    db.patchFragment(id, { transcript: session.transcript, langs: session.langs }).catch(() => {});
+    db.patchFragment(id, { transcript: session.transcript, langs: session.langs, transcribedBy: [...session.methods] }).catch(() => {});
   }, 2000);
 }
 
@@ -196,12 +196,13 @@ async function stopRecording() {
     await saveAudio(id, audioId, r.blob, r.mimeType, createdAt);
     await db.patchFragment(id, {
       status: 'done', durationMs: Math.round(r.durationMs), transcript: r.transcript, langs: r.langs, transcribing: r.pending > 0,
+      transcribedBy: [...r.methods],
     });
     // Whisper kończy ostatnie fragmenty w tle — zapisz pełny tekst, gdy skończy.
     // Rozpoznawanie nic nie dało albo nie dostawało dźwięku — przepisz całe nagranie Whisperem.
     const redo = (r.stalled || !r.transcript.trim()) && r.blob.size && whisper.ready();
     if (r.pending > 0) {
-      r.done.then((transcript) => db.patchFragment(id, { transcript, transcribing: false }))
+      r.done.then((transcript) => db.patchFragment(id, { transcript, transcribing: false, transcribedBy: [...r.methods] }))
         .then(() => { if (redo) transcribeFragment(id); });
     } else if (redo) transcribeFragment(id);
   } catch (err) {
@@ -341,6 +342,11 @@ function refreshTranscript(f) {
     autosize(ta);
   }
   ta.readOnly = busy;
+  const by = $('#transcribed-by');
+  if (by) {
+    by.textContent = `Transkrypcja: ${describeMethods(f.transcribedBy)}`;
+    by.hidden = !f.transcribedBy?.length;
+  }
   $('#transcribing').hidden = !busy;
   const btn = $('#whisper-btn');
   if (btn) btn.hidden = busy;
@@ -358,7 +364,8 @@ async function transcribeFragment(id) {
     await db.patchFragment(id, { transcribing: true });
     const audio = await whisper.decodeBlob(file.blob);
     const text = await whisper.transcribeLong(audio, f.langs?.[0] || lang);
-    await db.patchFragment(id, { transcript: text, transcribing: false });
+    // Tekst z całego nagrania zastępuje poprzedni, więc i sposób jest tylko ten jeden.
+    await db.patchFragment(id, { transcript: text, transcribing: false, transcribedBy: text ? [METHOD.afterWhisper()] : [] });
   } catch (err) {
     await db.patchFragment(id, { transcribing: false });
     toast(`Transkrypcja offline nie powiodła się: ${err.message}`);
@@ -396,6 +403,7 @@ async function renderDetail(id) {
     ${f.kind === 'audio' ? `<section class="block">
       <h3>Transkrypcja ${langs ? `<span class="muted">(${esc(langs)})</span>` : ''}</h3>
       <textarea id="transcript" rows="4" placeholder="Brak transkrypcji — możesz ją wpisać ręcznie.">${esc(f.transcript)}</textarea>
+      <p class="muted small" id="transcribed-by"${f.transcribedBy?.length ? '' : ' hidden'}>Transkrypcja: ${esc(describeMethods(f.transcribedBy))}</p>
       <p class="transcribing muted" id="transcribing" hidden>⏳ Transkrypcja offline (Whisper) w toku…</p>
       ${f.audioId && whisper.ready() ? '<button type="button" class="link-btn" id="whisper-btn">🎧 Transkrybuj nagranie offline (Whisper)</button>' : ''}
     </section>` : ''}
@@ -543,7 +551,9 @@ function scheduleSave(id, field, value) {
   const run = async () => {
     pendingSaves.delete(key);
     try {
-      await db.patchFragment(id, { [field]: value });
+      await db.patchFragment(id, field === 'transcript'
+        ? (cur) => ({ transcript: value, transcribedBy: addMethod(cur.transcribedBy, METHOD.manual) })
+        : { [field]: value });
       if (!pendingSaves.size) setSaveState('Zapisano ✓');
     } catch (err) {
       setSaveState(`Błąd zapisu: ${err.message}`);
