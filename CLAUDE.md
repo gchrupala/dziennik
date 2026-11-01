@@ -30,9 +30,9 @@ Szczegóły wpisu otwierają się do czytania (bez pól, bez usuwania); „✎ E
 Nowy wpis bez nagrania otwiera się od razu w edycji.
 Grupa i dzień to widoki do czytania: wszystkie wpisy po kolei z nagraniami, tekstem, zdjęciami i dokumentami
 (pliki wczytywane przy przewinięciu, IntersectionObserver). Karta w grupie i nagłówek grupy prowadzą do widoku grupy,
-nagłówek dnia na liście do widoku dnia. Ikona udostępniania (widoki do czytania) otwiera menu: „Tekst i zdjęcia” (Web Share z tekstem — data, godziny,
-miejsce, pogoda, transkrypcje, notatki — i zdjęciami JPEG; tekst trafia też do schowka, bo np. Signal przy zdjęciach
-pomija tekst, WhatsApp nie), „Sam tekst”, „Kopiuj tekst”. Bez Web Share — kopia do schowka. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
+nagłówek dnia na liście do widoku dnia. Ikona udostępniania (widoki do czytania) wysyła jeden plik HTML (`js/share.js`): data, godziny, miejsce, pogoda,
+transkrypcje, notatki i zdjęcia wbudowane jako JPEG ≤ 1280 px; bez nagrań. Bez Web Share z plikami — plik się pobiera.
+Gdy przygotowanie trwa za długo (przeglądarka odrzuca share po czasie), plik czeka i drugie dotknięcie go wysyła. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
 
 Można też utworzyć wpis bez nagrania (sama notatka/zdjęcia + lokalizacja i pogoda).
 Dane są lokalnie w przeglądarce (IndexedDB) i synchronizują się z prywatnym repo **`gchrupala/app-data`**
@@ -60,6 +60,7 @@ js/recorder.js        RecordingSession: MediaRecorder + SpeechRecognition (auto-
 js/whisper.js         Whisper: pobieranie/wybór modelu, kolejka transkrypcji, dekodowanie i cięcie nagrań
 js/whisper-worker.js  worker z transformers.js (import z jsDelivr, wersja przypięta)
 js/pcm-worklet.js     AudioWorklet zbierający próbki 16 kHz dla Whispera
+js/share.js           udostępnianie jako plik HTML (tekst + zdjęcia w środku)
 js/photos.js          podglądy JPEG zdjęć HEIC/HEIF (oryginał zostaje), `ensurePreviews()`, `displayFile()`
 js/heic-worker.js     worker: dekodowanie HEIC (heic-to/libheif), zmniejszenie do 2048 px, JPEG
 js/sync.js            synchronizacja z GitHub (app-data)

@@ -1,11 +1,12 @@
-import * as db from './db.js?v=202611011053';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011053';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011053';
-import * as whisper from './whisper.js?v=202611011053';
-import * as sync from './sync.js?v=202611011053';
-import * as pics from './photos.js?v=202611011053';
+import * as db from './db.js?v=202611011059';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011059';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011059';
+import * as whisper from './whisper.js?v=202611011059';
+import * as sync from './sync.js?v=202611011059';
+import * as pics from './photos.js?v=202611011059';
+import * as share from './share.js?v=202611011059';
 
-const APP_VERSION = '202611011053'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011059'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -591,94 +592,10 @@ function renderReading(f) {
   refreshTranscript(f);
 }
 
-// ---------- udostępnianie (widoki do czytania) ----------
+// ---------- udostępnianie (widoki do czytania): jeden plik HTML, js/share.js ----------
 const SHARE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 15 7c0 .3 0 .5.1.8L8.4 11.2a3 3 0 1 0 0 3.6l6.7 3.4A3 3 0 1 0 18 16z"/></svg>';
 const shareBtn = () => `<button type="button" class="icon-btn" id="share" aria-label="Udostępnij" title="Udostępnij">${SHARE_ICON}</button>`;
-const MAX_SHARE_FILES = 20;
-
-const groupTime = (g) => (g.length > 1
-  ? `${timeFmt.format(g[0].createdAt)}–${timeFmt.format(g.at(-1).createdAt)}`
-  : timeFmt.format(g[0].createdAt));
-
-function groupTextHead(g) {
-  const placed = g.find((f) => f.location?.place || f.location?.lat != null);
-  const w = g.find((f) => hasWeather(f.weather))?.weather;
-  return [
-    [groupTime(g), placed && placeShort(placed.location)].filter(Boolean).join(' — '),
-    w && `${weatherShort(w)}, ${describeWeather(w).text.toLowerCase()}`,
-  ].filter(Boolean).join('\n');
-}
-
-function entryText(f, withTime) {
-  if (!f.transcript?.trim() && !f.notes?.trim()) return ''; // sama godzina nic nie mówi
-  return [
-    withTime && timeFmt.format(f.createdAt),
-    f.transcript?.trim(),
-    f.notes?.trim(),
-  ].filter(Boolean).join('\n');
-}
-
-// Tekst grup wpisów: nagłówek dnia, potem każda grupa (godziny, miejsce, pogoda) i jej wpisy.
-function shareText(groups) {
-  const parts = [dayFmt.format(groups[0][0].createdAt).replace(/^./, (c) => c.toUpperCase())];
-  for (const g of groups) {
-    parts.push(groupTextHead(g));
-    for (const f of g) {
-      const t = entryText(f, g.length > 1);
-      if (t) parts.push(t);
-    }
-  }
-  return parts.join('\n\n');
-}
-
-// Menu: „Tekst i zdjęcia” (WhatsApp bierze oba; Signal przy zdjęciach pomija tekst — dlatego tekst idzie też
-// do schowka), „Sam tekst”, „Kopiuj tekst”. Zwraca wybór albo '' (anulowano).
-function askShare(hasPhotos) {
-  const dlg = $('#share-menu');
-  $('#share-all').hidden = !hasPhotos;
-  dlg.returnValue = '';
-  dlg.showModal();
-  return new Promise((resolve) => dlg.addEventListener('close', () => resolve(dlg.returnValue), { once: true }));
-}
-
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function shareGroups(groups) {
-  const text = shareText(groups);
-  const title = `Dziennik — ${dayFmt.format(groups[0][0].createdAt)}`;
-  const photoAtts = groups.flat().flatMap((f) => f.attachments).filter((x) => x.kind === 'photo').slice(0, MAX_SHARE_FILES);
-  const choice = await askShare(photoAtts.length > 0);
-  if (!choice) return;
-  if (choice === 'copy' || !navigator.share) {
-    toast(await copyText(text) ? 'Skopiowano tekst do schowka.' : 'Nie udało się skopiować tekstu.');
-    return;
-  }
-  try {
-    if (choice === 'all') {
-      const copied = copyText(text); // na wypadek, gdyby aplikacja pominęła tekst przy zdjęciach
-      const files = [];
-      for (const a of photoAtts) {
-        const file = await pics.displayFile(a);
-        if (file) files.push(new File([file.blob], file.name || a.name, { type: file.type || file.blob.type }));
-      }
-      if (files.length && navigator.canShare?.({ files, text })) {
-        await navigator.share({ title, text, files });
-        if (await copied) toast('Tekst jest też w schowku — wklej go, jeśli aplikacja wysłała same zdjęcia.', 6000);
-        return;
-      }
-    }
-    await navigator.share({ title, text });
-  } catch (err) {
-    if (err?.name !== 'AbortError') toast(`Nie udało się udostępnić: ${err.message}`);
-  }
-}
+const shareGroups = (groups) => share.shareGroups(groups, toast);
 
 // ---------- czytanie grupy i całego dnia ----------
 let scrollTarget = null; // wpis, do którego przewinąć widok grupy/dnia
