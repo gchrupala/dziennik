@@ -376,3 +376,11 @@ a.group-head { display: block; color: var(--muted); text-decoration: none; }
 .entry-notes { padding-left: 10px; border-left: 3px solid var(--line); }
 .entry .photos { margin-top: 6px; }
 .entry .photo:empty { background: var(--line); border-radius: 10px; }
+
+/* ---------- menu udostępniania ---------- */
+.share-menu { width: min(92vw, 340px); padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+.share-menu::backdrop { background: rgb(0 0 0 / .35); }
+.share-menu form { display: flex; flex-direction: column; gap: 8px; }
+.share-menu .btn { justify-content: flex-start; padding: 12px 14px; font-size: 16px; }
+.share-menu .btn[hidden] { display: none; }
+.share-title { margin: 0 0 4px; font-weight: 650; }

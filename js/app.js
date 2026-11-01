@@ -1,11 +1,11 @@
-import * as db from './db.js?v=202611011045';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011045';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011045';
-import * as whisper from './whisper.js?v=202611011045';
-import * as sync from './sync.js?v=202611011045';
-import * as pics from './photos.js?v=202611011045';
+import * as db from './db.js?v=202611011053';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011053';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011053';
+import * as whisper from './whisper.js?v=202611011053';
+import * as sync from './sync.js?v=202611011053';
+import * as pics from './photos.js?v=202611011053';
 
-const APP_VERSION = '202611011045'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011053'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -631,26 +631,50 @@ function shareText(groups) {
   return parts.join('\n\n');
 }
 
+// Menu: „Tekst i zdjęcia” (WhatsApp bierze oba; Signal przy zdjęciach pomija tekst — dlatego tekst idzie też
+// do schowka), „Sam tekst”, „Kopiuj tekst”. Zwraca wybór albo '' (anulowano).
+function askShare(hasPhotos) {
+  const dlg = $('#share-menu');
+  $('#share-all').hidden = !hasPhotos;
+  dlg.returnValue = '';
+  dlg.showModal();
+  return new Promise((resolve) => dlg.addEventListener('close', () => resolve(dlg.returnValue), { once: true }));
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function shareGroups(groups) {
   const text = shareText(groups);
   const title = `Dziennik — ${dayFmt.format(groups[0][0].createdAt)}`;
-  if (!navigator.share) {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast('Skopiowano tekst do schowka.');
-    } catch {
-      toast('Udostępnianie nie jest dostępne w tej przeglądarce.');
-    }
+  const photoAtts = groups.flat().flatMap((f) => f.attachments).filter((x) => x.kind === 'photo').slice(0, MAX_SHARE_FILES);
+  const choice = await askShare(photoAtts.length > 0);
+  if (!choice) return;
+  if (choice === 'copy' || !navigator.share) {
+    toast(await copyText(text) ? 'Skopiowano tekst do schowka.' : 'Nie udało się skopiować tekstu.');
     return;
   }
-  const files = [];
-  for (const a of groups.flat().flatMap((f) => f.attachments).filter((x) => x.kind === 'photo').slice(0, MAX_SHARE_FILES)) {
-    const file = await pics.displayFile(a);
-    if (file) files.push(new File([file.blob], file.name || a.name, { type: file.type || file.blob.type }));
-  }
   try {
-    if (files.length && navigator.canShare?.({ files, text })) await navigator.share({ title, text, files });
-    else await navigator.share({ title, text });
+    if (choice === 'all') {
+      const copied = copyText(text); // na wypadek, gdyby aplikacja pominęła tekst przy zdjęciach
+      const files = [];
+      for (const a of photoAtts) {
+        const file = await pics.displayFile(a);
+        if (file) files.push(new File([file.blob], file.name || a.name, { type: file.type || file.blob.type }));
+      }
+      if (files.length && navigator.canShare?.({ files, text })) {
+        await navigator.share({ title, text, files });
+        if (await copied) toast('Tekst jest też w schowku — wklej go, jeśli aplikacja wysłała same zdjęcia.', 6000);
+        return;
+      }
+    }
+    await navigator.share({ title, text });
   } catch (err) {
     if (err?.name !== 'AbortError') toast(`Nie udało się udostępnić: ${err.message}`);
   }

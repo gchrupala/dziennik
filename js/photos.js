@@ -1,5 +1,5 @@
 // Zdjęcia HEIC/HEIF: oryginał zostaje, obok powstaje JPEG do wyświetlania (attachment.preview → plik w `files`).
-import * as db from './db.js?v=202611011045';
+import * as db from './db.js?v=202611011053';
 
 const MAX_SIDE = 2048; // px, dłuższy bok podglądu
 const QUALITY = 0.85;
@@ -11,7 +11,7 @@ let seq = 0;
 const waiters = new Map();
 function convert(blob) {
   if (!worker) {
-    worker = new Worker(new URL('./heic-worker.js?v=202611011045', import.meta.url), { type: 'module' });
+    worker = new Worker(new URL('./heic-worker.js?v=202611011053', import.meta.url), { type: 'module' });
     worker.onmessage = ({ data }) => {
       const w = waiters.get(data.id);
       waiters.delete(data.id);

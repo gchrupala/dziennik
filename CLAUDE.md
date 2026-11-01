@@ -30,8 +30,9 @@ Szczegóły wpisu otwierają się do czytania (bez pól, bez usuwania); „✎ E
 Nowy wpis bez nagrania otwiera się od razu w edycji.
 Grupa i dzień to widoki do czytania: wszystkie wpisy po kolei z nagraniami, tekstem, zdjęciami i dokumentami
 (pliki wczytywane przy przewinięciu, IntersectionObserver). Karta w grupie i nagłówek grupy prowadzą do widoku grupy,
-nagłówek dnia na liście do widoku dnia. Ikona udostępniania (widoki do czytania): Web Share API z tekstem
-(data, godziny, miejsce, pogoda, transkrypcje, notatki) i zdjęciami (JPEG); bez Web Share — kopia tekstu do schowka. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
+nagłówek dnia na liście do widoku dnia. Ikona udostępniania (widoki do czytania) otwiera menu: „Tekst i zdjęcia” (Web Share z tekstem — data, godziny,
+miejsce, pogoda, transkrypcje, notatki — i zdjęciami JPEG; tekst trafia też do schowka, bo np. Signal przy zdjęciach
+pomija tekst, WhatsApp nie), „Sam tekst”, „Kopiuj tekst”. Bez Web Share — kopia do schowka. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
 
 Można też utworzyć wpis bez nagrania (sama notatka/zdjęcia + lokalizacja i pogoda).
 Dane są lokalnie w przeglądarce (IndexedDB) i synchronizują się z prywatnym repo **`gchrupala/app-data`**
