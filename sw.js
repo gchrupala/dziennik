@@ -1,5 +1,6 @@
-// Service worker: aplikacja działa offline. Strategia stale-while-revalidate dla plików aplikacji.
-const CACHE = 'dziennik-v3';
+// Service worker: aplikacja działa offline. Pliki aplikacji: najpierw sieć (z pominięciem cache HTTP),
+// a gdy jej brak lub odpowiada zbyt wolno — kopia z cache.
+const CACHE = 'dziennik-v4';
 const CDN_CACHE = 'dziennik-cdn-v1'; // biblioteka Whisper (transformers.js, ONNX Runtime) z jsDelivr
 const SHELL = [
   './',
@@ -20,7 +21,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'no-cache' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -62,18 +63,19 @@ self.addEventListener('fetch', (e) => {
 
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    const cached = await cache.match(req, { ignoreSearch: true });
-    const network = fetch(req)
+    const network = fetch(req, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) cache.put(req, res.clone());
         return res;
       })
       .catch(() => null);
-    if (cached) {
-      e.waitUntil(network);
-      return isolate(cached);
+    const timeout = new Promise((r) => setTimeout(() => r(null), 4000));
+    let res = await Promise.race([network, timeout]);
+    if (!res) {
+      res = (await cache.match(req, { ignoreSearch: true }))
+        || (req.mode === 'navigate' && (await cache.match('./index.html')))
+        || (await network);
     }
-    const res = (await network) || (req.mode === 'navigate' && (await cache.match('./index.html')));
     return res ? isolate(res) : Response.error();
   })());
 });

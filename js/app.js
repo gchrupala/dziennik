@@ -789,7 +789,16 @@ async function init() {
   await render();
   backfillContext();
   window.addEventListener('online', () => backfillContext());
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    // Nowa wersja aplikacji przejęła stronę — przeładuj (chyba że trwa nagrywanie).
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return;
+      if (rec) window.addEventListener('hashchange', () => location.reload(), { once: true });
+      else location.reload();
+    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
+  }
 }
 
 init();

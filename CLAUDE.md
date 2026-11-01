@@ -77,10 +77,12 @@ Audio jest zapisywane co 10 s w trakcie nagrania, więc przerwane nagranie nie p
 python3 -m http.server 8000   # potem http://localhost:8000
 ```
 
-Mikrofon i lokalizacja wymagają HTTPS albo `localhost`. Service worker serwuje najpierw wersję z cache,
-więc po zmianach przeładuj stronę dwa razy (albo wyłącz cache w DevTools).
+Mikrofon i lokalizacja wymagają HTTPS albo `localhost`. Service worker: przy internecie zawsze najnowsze pliki
+(sieć z `cache: 'no-cache'`, limit 4 s), offline — kopia z cache. Nowy `sw.js` przejmuje stronę i aplikacja
+sama się przeładowuje (`controllerchange`; w trakcie nagrania dopiero po jego zakończeniu).
 
 Hosting: GitHub Pages z gałęzi `main`, katalog główny (plik `.nojekyll` wyłącza Jekylla).
+Adres: https://grzegorz.chrupala.me/dziennik/ (gchrupala.github.io przekierowuje na własną domenę; cache HTTP 10 min).
 
 ## Testowanie
 
