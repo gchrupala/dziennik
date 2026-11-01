@@ -83,7 +83,7 @@ kind ('audio'|'text'), appVersion, autoStopSec, device, langs[], transcript, tra
 `appVersion` = wersja aplikacji przy tworzeniu wpisu (diagnostyka), `autoStopSec` = ustawienie końca po ciszy w tym nagraniu.
 `transcribedBy[]` = jak powstał tekst, w kolejności: `live-browser` (na żywo, przeglądarka), `live-device` (na żywo,
 `processLocally`), `live-whisper:<model>` (na żywo, Whisper), `whisper:<model>` (po nagraniu, cały plik; zastępuje
-wcześniejsze), `manual` (poprawka ręczna); opis w `describeMethods()` (`js/recorder.js`), widoczny w szczegółach i w raporcie MD.
+wcześniejsze), `server:<model>` (po nagraniu na GitHubie, patrz niżej), `manual` (poprawka ręczna); opis w `describeMethods()` (`js/recorder.js`), widoczny w szczegółach i w raporcie MD.
 `transcribing: true` = Whisper kończy w tle (pole tylko do odczytu); po restarcie aplikacji nagranie jest transkrybowane od nowa.
 `attachments` trzyma tylko metadane (`id, kind ('photo'|'document'), name, type, size, preview?`); bloby są w `files`.
 Zdjęcie HEIC dostaje `preview: {id, name, type: 'image/jpeg', size}` (plik `kind: 'preview'` w `files`, w repo obok oryginału,
@@ -91,6 +91,15 @@ w `dziennik.json` jako plik z `kind: 'preview', of: <id zdjęcia>`). Podglądy p
 Nagranie kończy się samo po ciszy (domyślnie 60 s, Ustawienia → Nagrywanie; `dziennik.autoStop` w localStorage,
 ostatnie 10 s z odliczaniem). Poziom mowy liczony z bloków AudioWorklet (`silentMs()` w `js/recorder.js`; mowa = 3 z 4 bloków 0,25 s powyżej 0,02, krótkie stuknięcia się nie liczą), bo działają też przy wygaszonym ekranie.
 Audio jest zapisywane co 10 s w trakcie nagrania, więc przerwane nagranie nie przepada (status `interrupted`).
+
+## Transkrypcja na GitHubie (repo app-data)
+
+`gchrupala/app-data`: `.github/workflows/dziennik-transcribe.yml` + `.github/scripts/dziennik_transcribe.py`.
+Po każdym zapisie `*/dziennik.json` (push z aplikacji) GitHub Actions przepisuje nagrania modelem Whisper large-v3-turbo
+(faster-whisper, CPU, int8, VAD; dekodowanie przez ffmpeg) i zapisuje tekst w `dziennik.json` z `transcribedBy: ['server:large-v3-turbo']`
+i nowym `updatedAt` — aplikacja przyjmuje go przy synchronizacji (nowsza wersja wygrywa). Pomija wpisy już przepisane
+i poprawione ręcznie (`manual`). Przy konflikcie zapisu ponawia na najnowszym JSON. Commity: `Dziennik: transkrypcja <model> <ISO>`.
+Uruchomienie ręczne (np. dla wszystkich nagrań): Actions → „Dziennik — transkrypcja” → Run workflow.
 
 ## Konwencje
 
