@@ -24,6 +24,11 @@ Prosta aplikacja webowa (PWA) do nagrywania fragmentów raportu z podróży. Ka�
   (pogoda historyczna z danych godzinowych Open-Meteo, do ~3 miesięcy wstecz),
 - pozwala dodać zdjęcia, dokumenty i notatkę tekstową; transkrypcję można poprawiać ręcznie.
 
+Bliskie wpisy (następny zaczął się ≤ 10 min po końcu poprzedniego, ten sam dzień, ≤ 200 m albo brak lokalizacji)
+są grupowane pod jednym nagłówkiem na liście i w `dziennik.md` (`groupFragments()` w `js/context.js`). Dane się nie zmieniają.
+Szczegóły wpisu otwierają się do czytania (bez pól, bez usuwania); „✎ Edytuj” włącza edycję, „✓ Gotowe” ją kończy.
+Nowy wpis bez nagrania otwiera się od razu w edycji.
+
 Można też utworzyć wpis bez nagrania (sama notatka/zdjęcia + lokalizacja i pogoda).
 Dane są lokalnie w przeglądarce (IndexedDB) i synchronizują się z prywatnym repo **`gchrupala/app-data`**
 (GitHub REST API, Contents; fine-grained token wpisany w Ustawieniach, trzymany w localStorage). Układ w repo

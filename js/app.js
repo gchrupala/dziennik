@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611011021';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011021';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611011021';
-import * as whisper from './whisper.js?v=202611011021';
-import * as sync from './sync.js?v=202611011021';
+import * as db from './db.js?v=202611011029';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011029';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011029';
+import * as whisper from './whisper.js?v=202611011029';
+import * as sync from './sync.js?v=202611011029';
 
-const APP_VERSION = '202611011021'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011029'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -276,13 +276,18 @@ $('#text-entry').addEventListener('click', async () => {
 });
 
 // ---------- lista ----------
-function cardHtml(f) {
+const entriesLabel = (n) => {
+  const few = n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14);
+  return `${n} ${n === 1 ? 'wpis' : few ? 'wpisy' : 'wpisów'}`;
+};
+
+function cardHtml(f, inGroup = false) {
   const photos = f.attachments.filter((a) => a.kind === 'photo').length;
   const docs = f.attachments.filter((a) => a.kind === 'document').length;
   const meta = [
     timeFmt.format(f.createdAt),
-    placeShort(f.location),
-    weatherShort(f.weather),
+    !inGroup && placeShort(f.location), // w grupie miejsce i pogoda są w nagłówku
+    !inGroup && weatherShort(f.weather),
     f.kind === 'audio' && f.durationMs ? `🎙 ${fmtDuration(f.durationMs)}` : '',
   ].filter(Boolean);
   const text = f.transcript || f.notes;
@@ -309,19 +314,34 @@ async function renderList() {
   }
   let html = '';
   let lastDay = '';
-  for (const f of items) {
-    const day = dayFmt.format(f.createdAt);
+  // Najnowsze na górze; bliskie w czasie i miejscu wpisy razem (wewnątrz grupy chronologicznie).
+  for (const group of groupFragments(items).reverse()) {
+    const first = group[0];
+    const day = dayFmt.format(first.createdAt);
     if (day !== lastDay) {
       html += `<h2 class="day">${esc(day)}</h2>`;
       lastDay = day;
     }
-    html += cardHtml(f);
+    if (group.length === 1) {
+      html += cardHtml(first);
+      continue;
+    }
+    const placed = group.find((f) => f.location?.lat != null);
+    const head = [
+      `${timeFmt.format(first.createdAt)}–${timeFmt.format(group.at(-1).createdAt)}`,
+      placed && placeShort(placed.location),
+      weatherShort(group.find((f) => hasWeather(f.weather))?.weather),
+      entriesLabel(group.length),
+    ].filter(Boolean);
+    html += `<div class="group"><div class="group-head">${head.map(esc).join('<span class="sep">·</span>')}</div>
+      ${group.map((f) => cardHtml(f, true)).join('')}</div>`;
   }
   list.innerHTML = html;
 }
 
 // ---------- szczegóły wpisu ----------
 let currentId = null;
+let editing = false; // szczegóły: domyślnie tylko do czytania; edycja (zmiany, usuwanie) po „Edytuj”
 let audioUrl = null;
 let attachmentUrls = [];
 
@@ -371,14 +391,17 @@ async function refreshContext(id) {
 
 // Gdy Whisper pracuje w tle, pole transkrypcji jest tylko do odczytu i aktualizuje się samo.
 function refreshTranscript(f) {
-  const ta = $('#transcript');
-  if (!ta || currentId !== f.id) return;
+  if (currentId !== f.id) return;
   const busy = Boolean(f.transcribing);
-  if (busy || ta.readOnly) {
+  const read = $('#transcript-read');
+  if (read) read.innerHTML = readHtml(f.transcript, 'Brak transkrypcji.');
+  const ta = $('#transcript');
+  if (!ta && !read) return;
+  if (ta && (busy || ta.readOnly)) {
     ta.value = f.transcript;
     autosize(ta);
   }
-  ta.readOnly = busy;
+  if (ta) ta.readOnly = busy;
   const by = $('#transcribed-by');
   if (by) {
     by.textContent = `Transkrypcja: ${describeMethods(f.transcribedBy)}`;
@@ -420,11 +443,13 @@ async function renderDetail(id) {
   const view = $('#view-detail');
   const f = await db.getFragment(id);
   revokeUrls();
+  if (currentId !== id) editing = focusNotes; // nowy wpis bez nagrania otwiera się od razu do edycji
   currentId = id;
   if (!f) {
     view.innerHTML = '<p class="empty">Nie znaleziono wpisu.</p>';
     return;
   }
+  if (!editing) return renderReading(f);
   const langs = (f.langs || []).map(langLabel).join(', ');
   view.innerHTML = `
     <div class="detail-head">
@@ -433,8 +458,12 @@ async function renderDetail(id) {
         <div class="detail-time">${esc(timeFmt.format(f.createdAt))}${f.durationMs ? ` · 🎙 ${fmtDuration(f.durationMs)}` : ''}</div>
         ${f.status === 'interrupted' ? '<span class="badge warn">Nagranie przerwane — zapisano to, co się udało</span>' : ''}
       </div>
-      <button type="button" class="icon-btn danger" id="delete" aria-label="Usuń wpis" title="Usuń wpis">🗑</button>
+      <div class="detail-actions">
+        <button type="button" class="icon-btn danger" id="delete" aria-label="Usuń wpis" title="Usuń wpis">🗑</button>
+        <button type="button" class="btn small primary" id="done">✓ Gotowe</button>
+      </div>
     </div>
+    <p class="edit-note">Tryb edycji — zmiany zapisują się same.</p>
     <section class="context" id="context">${contextHtml(f)}</section>
     ${f.audioId ? '<section class="block"><h3>Nagranie</h3><div id="audio-slot" class="muted">Wczytuję…</div></section>' : ''}
     ${f.kind === 'audio' ? `<section class="block">
@@ -473,6 +502,11 @@ async function renderDetail(id) {
     await db.deleteFragment(id);
     goBack();
   });
+  $('#done', view).addEventListener('click', async () => {
+    await flushSaves();
+    editing = false;
+    renderDetail(id);
+  });
   $('#add-photo', view).addEventListener('change', (e) => addFiles(id, e.target, 'photo'));
   $('#add-doc', view).addEventListener('change', (e) => addFiles(id, e.target, 'document'));
 
@@ -489,6 +523,48 @@ async function renderDetail(id) {
     focusNotes = false;
     $('#notes', view).focus();
   }
+}
+
+// Tekst do czytania: akapity z podziałów wierszy.
+const readHtml = (text, empty) => (text?.trim()
+  ? text.trim().split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')
+  : `<p class="muted">${esc(empty)}</p>`);
+
+// Widok do czytania: bez pól edycji, bez usuwania.
+function renderReading(f) {
+  const view = $('#view-detail');
+  const id = f.id;
+  const langs = (f.langs || []).map(langLabel).join(', ');
+  view.innerHTML = `
+    <div class="detail-head">
+      <div>
+        <div class="detail-date">${esc(dayFmt.format(f.createdAt))}</div>
+        <div class="detail-time">${esc(timeFmt.format(f.createdAt))}${f.durationMs ? ` · 🎙 ${fmtDuration(f.durationMs)}` : ''}</div>
+        ${f.status === 'interrupted' ? '<span class="badge warn">Nagranie przerwane — zapisano to, co się udało</span>' : ''}
+      </div>
+      <button type="button" class="btn small" id="edit">✎ Edytuj</button>
+    </div>
+    <section class="context" id="context">${contextHtml(f)}</section>
+    ${f.audioId ? '<section class="block"><div id="audio-slot" class="muted">Wczytuję…</div></section>' : ''}
+    ${f.kind === 'audio' ? `<section class="block">
+      <h3>Transkrypcja ${langs ? `<span class="muted">(${esc(langs)})</span>` : ''}</h3>
+      <div class="read-text" id="transcript-read">${readHtml(f.transcript, 'Brak transkrypcji.')}</div>
+      <p class="muted small" id="transcribed-by"${f.transcribedBy?.length ? '' : ' hidden'}>Transkrypcja: ${esc(describeMethods(f.transcribedBy))}</p>
+      <p class="transcribing muted" id="transcribing" hidden>⏳ Transkrypcja offline (Whisper) w toku…</p>
+    </section>` : ''}
+    ${f.notes?.trim() || f.kind !== 'audio' ? `<section class="block">
+      <h3>Notatki</h3>
+      <div class="read-text">${readHtml(f.notes, 'Brak notatki.')}</div>
+    </section>` : ''}
+    <section class="block" id="photos-block" hidden><h3>Zdjęcia</h3><div class="photos" id="photos"></div></section>
+    <section class="block" id="docs-block" hidden><h3>Dokumenty</h3><ul class="docs" id="docs"></ul></section>`;
+  $('#edit', view).addEventListener('click', () => {
+    editing = true;
+    renderDetail(id);
+  });
+  if (f.audioId) renderAudio(f);
+  renderAttachments(f);
+  refreshTranscript(f);
 }
 
 async function renderAudio(f) {
@@ -528,14 +604,18 @@ async function renderAttachments(f) {
   photosEl.innerHTML = items.filter((i) => i.kind === 'photo').map((i) => `
     <figure class="photo">
       <button type="button" class="photo-open" data-url="${i.url}" aria-label="Powiększ ${esc(i.name)}"><img src="${i.url}" alt="${esc(i.name)}" loading="lazy"></button>
-      <button type="button" class="remove" data-remove="${esc(i.id)}" aria-label="Usuń zdjęcie">✕</button>
+      ${editing ? `<button type="button" class="remove" data-remove="${esc(i.id)}" aria-label="Usuń zdjęcie">✕</button>` : ''}
     </figure>`).join('');
   docsEl.innerHTML = items.filter((i) => i.kind === 'document').map((i) => `
     <li>
       <a href="${i.url}" download="${esc(i.name)}">📄 ${esc(i.name)}</a>
       <span class="muted">${fmtSize(i.size)}</span>
-      <button type="button" class="remove" data-remove="${esc(i.id)}" aria-label="Usuń dokument">✕</button>
+      ${editing ? `<button type="button" class="remove" data-remove="${esc(i.id)}" aria-label="Usuń dokument">✕</button>` : ''}
     </li>`).join('');
+  const pb = $('#photos-block');
+  if (pb) pb.hidden = !items.some((i) => i.kind === 'photo');
+  const docsBlock = $('#docs-block');
+  if (docsBlock) docsBlock.hidden = !items.some((i) => i.kind === 'document');
 }
 
 $('#view-detail').addEventListener('click', async (e) => {
@@ -546,7 +626,7 @@ $('#view-detail').addEventListener('click', async (e) => {
     return;
   }
   const remove = e.target.closest('[data-remove]');
-  if (remove && currentId) {
+  if (remove && currentId && editing) {
     if (!confirm('Usunąć ten załącznik?')) return;
     const id = currentId;
     await db.removeAttachment(id, remove.dataset.remove);
@@ -641,6 +721,7 @@ async function render() {
     const leaving = currentId;
     await flushSaves();
     currentId = null;
+    editing = false;
     revokeUrls();
     await dropIfEmpty(leaving);
   }

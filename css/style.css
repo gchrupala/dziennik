@@ -342,3 +342,20 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 #sync-status[data-error="true"] { color: var(--warn); }
 code { font-size: .9em; }
 .field input.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; letter-spacing: .02em; word-break: break-all; }
+
+/* ---------- grupy bliskich wpisów ---------- */
+.group {
+  margin-bottom: 10px;
+  padding: 8px 0 0 10px;
+  border-left: 3px solid var(--accent);
+}
+.group-head { margin: 0 0 8px 2px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.group-head .sep { margin: 0 6px; }
+.group .card { margin-bottom: 6px; }
+
+/* ---------- czytanie / edycja ---------- */
+.read-text p { margin: 0 0 10px; line-height: 1.5; }
+.read-text p:last-child { margin-bottom: 0; }
+.detail-actions { display: flex; align-items: center; gap: 8px; }
+.edit-note { margin: 10px 0 0; padding: 6px 10px; border-radius: 8px; font-size: 13px; color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }

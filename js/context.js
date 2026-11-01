@@ -1,5 +1,5 @@
 // Kontekst wpisu: lokalizacja (GPS), nazwa miejsca (Nominatim/OSM) i pogoda (Open-Meteo).
-import { getFragment, getAllFragments, patchFragment, notify } from './db.js?v=202611011021';
+import { getFragment, getAllFragments, patchFragment, notify } from './db.js?v=202611011029';
 
 const busy = new Set();
 export const isBusy = (id) => busy.has(id);
@@ -198,4 +198,40 @@ export async function backfillContext() {
   } finally {
     backfilling = false;
   }
+}
+
+// ---------- grupowanie bliskich wpisów (tylko widok i raport; dane się nie zmieniają) ----------
+export const GROUP_GAP_MS = 10 * 60 * 1000; // przerwa między końcem jednego a początkiem następnego
+export const GROUP_DIST_M = 200;            // dokładność GPS w telefonie to zwykle 20–40 m
+
+export function distanceM(a, b) {
+  const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+
+const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+
+// Następny wpis zaczął się niedługo po końcu poprzedniego, tego samego dnia i w pobliżu
+// (bez lokalizacji w którymś z nich decyduje sam czas).
+function follows(prev, next) {
+  const gap = next.createdAt - (prev.createdAt + (prev.durationMs || 0));
+  if (gap > GROUP_GAP_MS || !sameDay(prev.createdAt, next.createdAt)) return false;
+  const a = prev.location;
+  const b = next.location;
+  if (a?.lat == null || b?.lat == null) return true;
+  return distanceM(a, b) <= GROUP_DIST_M;
+}
+
+/** Wpisy (dowolna kolejność) → grupy kolejnych bliskich wpisów, chronologicznie (także wewnątrz grup). */
+export function groupFragments(fragments) {
+  const groups = [];
+  for (const f of [...fragments].sort((a, b) => a.createdAt - b.createdAt)) {
+    const last = groups.at(-1);
+    if (last && follows(last.at(-1), f)) last.push(f);
+    else groups.push([f]);
+  }
+  return groups;
 }

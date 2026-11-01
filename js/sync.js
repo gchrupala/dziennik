@@ -1,9 +1,9 @@
 // Kopia i synchronizacja z repozytorium GitHub (domyślnie gchrupala/app-data) przez REST API.
 // Układ w repo (jak w innych aplikacjach): <profil>/dziennik.json (wszystkie wpisy, metadane),
 // <profil>/dziennik.md (czytelny raport), <profil>/dziennik/<data>_<id>/<pliki> (nagrania, zdjęcia, dokumenty).
-import * as db from './db.js?v=202611011021';
-import { describeWeather } from './context.js?v=202611011021';
-import { describeMethods } from './recorder.js?v=202611011021';
+import * as db from './db.js?v=202611011029';
+import { describeWeather, groupFragments } from './context.js?v=202611011029';
+import { describeMethods } from './recorder.js?v=202611011029';
 
 const K = { token: 'dziennik.gh.token', repo: 'dziennik.gh.repo', profile: 'dziennik.gh.profile', last: 'dziennik.gh.last', deleted: 'dziennik.deleted' };
 const ls = {
@@ -113,31 +113,52 @@ const mdLink = (p) => encPath(p).replace(/\(/g, '%28').replace(/\)/g, '%29');
 function reportMd(fragments) {
   const lines = ['# Dziennik podróży', ''];
   let lastDay = '';
-  for (const f of [...fragments].sort((a, b) => a.createdAt - b.createdAt)) {
-    const day = dayFmt.format(f.createdAt);
+  for (const group of groupFragments(fragments)) {
+    const first = group[0];
+    const day = dayFmt.format(first.createdAt);
     if (day !== lastDay) { lines.push(`## ${day[0].toUpperCase()}${day.slice(1)}`, ''); lastDay = day; }
-    const loc = f.location;
-    lines.push(`### ${timeFmt.format(f.createdAt)}${loc?.place ? ` — ${loc.place}` : ''}`, '');
-    const meta = [];
-    if (loc?.lat != null) meta.push(`📍 [${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}](https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lon}#map=15/${loc.lat}/${loc.lon})`);
-    if (f.weather?.temperature != null) {
-      const w = describeWeather(f.weather);
-      meta.push(`${w.icon} ${Math.round(f.weather.temperature)}°C, ${w.text.toLowerCase()}`);
+    // Bliskie wpisy (czas i miejsce) pod jednym nagłówkiem; miejsce i pogoda z pierwszego.
+    const place = group.find((f) => f.location?.place)?.location.place;
+    const time = group.length > 1
+      ? `${timeFmt.format(first.createdAt)}–${timeFmt.format(group.at(-1).createdAt)}`
+      : timeFmt.format(first.createdAt);
+    lines.push(`### ${time}${place ? ` — ${place}` : ''}`, '');
+    lines.push(...metaLines(first));
+    for (const f of group) {
+      if (group.length > 1) lines.push(`**${timeFmt.format(f.createdAt)}**`, '');
+      lines.push(...bodyLines(f));
     }
-    if (meta.length) lines.push(meta.join(' · '), '');
-    if (f.transcript) {
-      lines.push(...f.transcript.split('\n').map((l) => `> ${l}`), '');
-      if (f.transcribedBy?.length) lines.push(`*Transkrypcja: ${describeMethods(f.transcribedBy)}*`, '');
-    }
-    if (f.notes) lines.push(f.notes, '');
-    for (const file of f.files || []) {
-      const p = mdLink(file.path);
-      if (file.kind === 'photo') lines.push(`![${file.name}](${p})`);
-      else lines.push(`- ${file.kind === 'audio' ? '🎙 nagranie' : '📄'} [${file.name}](${p})`);
-    }
-    if (f.files?.length) lines.push('');
   }
   return lines.join('\n');
+}
+
+function metaLines(f) {
+  const lines = [];
+  const loc = f.location;
+  const meta = [];
+  if (loc?.lat != null) meta.push(`📍 [${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}](https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lon}#map=15/${loc.lat}/${loc.lon})`);
+  if (f.weather?.temperature != null) {
+    const w = describeWeather(f.weather);
+    meta.push(`${w.icon} ${Math.round(f.weather.temperature)}°C, ${w.text.toLowerCase()}`);
+  }
+  if (meta.length) lines.push(meta.join(' · '), '');
+  return lines;
+}
+
+function bodyLines(f) {
+  const lines = [];
+  if (f.transcript) {
+    lines.push(...f.transcript.split('\n').map((l) => `> ${l}`), '');
+    if (f.transcribedBy?.length) lines.push(`*Transkrypcja: ${describeMethods(f.transcribedBy)}*`, '');
+  }
+  if (f.notes) lines.push(f.notes, '');
+  for (const file of f.files || []) {
+    const p = mdLink(file.path);
+    if (file.kind === 'photo') lines.push(`![${file.name}](${p})`);
+    else lines.push(`- ${file.kind === 'audio' ? '🎙 nagranie' : '📄'} [${file.name}](${p})`);
+  }
+  if (f.files?.length) lines.push('');
+  return lines;
 }
 
 // ---------- synchronizacja ----------
