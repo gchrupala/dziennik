@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611010950';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611010950';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010950';
-import * as whisper from './whisper.js?v=202611010950';
-import * as sync from './sync.js?v=202611010950';
+import * as db from './db.js?v=202611010954';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611010954';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010954';
+import * as whisper from './whisper.js?v=202611010954';
+import * as sync from './sync.js?v=202611010954';
 
-const APP_VERSION = '202611010950'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611010954'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -62,6 +62,8 @@ $('#langs').addEventListener('click', (e) => {
 // ---------- nagrywanie ----------
 let rec = null; // { id, audioId, session, createdAt, timer, saveTimer, wakeLock }
 let busyRec = false;
+let reloadPending = false; // nowa wersja czeka, aż skończy się nagrywanie
+const reloadIfPending = () => { if (reloadPending && !rec && !busyRec) location.reload(); };
 
 function setRecordingUI(on) {
   document.body.classList.toggle('recording', on);
@@ -159,6 +161,7 @@ async function startRecording() {
     busyRec = false;
     $('#rec-btn').disabled = false;
     toast(micErrorMessage(err));
+    reloadIfPending();
     return;
   }
   setRecordingUI(true);
@@ -214,6 +217,7 @@ async function stopRecording() {
   $('#rec-btn').disabled = false;
   setRecordingUI(false);
   navigate(`#/f/${id}`);
+  reloadIfPending();
 }
 
 $('#rec-btn').addEventListener('click', () => (rec ? stopRecording() : startRecording()));
@@ -821,8 +825,9 @@ async function init() {
     const hadController = Boolean(navigator.serviceWorker.controller);
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController) return;
-      if (rec) window.addEventListener('hashchange', () => location.reload(), { once: true });
-      else location.reload();
+      // `busyRec`: nagranie właśnie startuje (mikrofon, moduły), a `rec` nie jest jeszcze ustawione.
+      reloadPending = true;
+      reloadIfPending();
     });
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
   }
