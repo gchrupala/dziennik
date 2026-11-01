@@ -1,13 +1,13 @@
-import * as db from './db.js?v=202611011106';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011106';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011106';
-import * as whisper from './whisper.js?v=202611011106';
-import * as sync from './sync.js?v=202611011106';
-import * as pics from './photos.js?v=202611011106';
-import * as share from './share.js?v=202611011106';
-import { mapHtml, renderMaps } from './map.js?v=202611011106';
+import * as db from './db.js?v=202611011112';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011112';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011112';
+import * as whisper from './whisper.js?v=202611011112';
+import * as sync from './sync.js?v=202611011112';
+import * as pics from './photos.js?v=202611011112';
+import * as share from './share.js?v=202611011112';
+import { mapHtml, renderMaps } from './map.js?v=202611011112';
 
-const APP_VERSION = '202611011106'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011112'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -34,9 +34,18 @@ function fileStamp(ts) {
 const audioExt = (mime) => (/mp4|m4a|aac/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : 'webm');
 
 let toastTimer;
-function toast(msg, ms = 4500) {
+// `action`: { label, fn } — przycisk w komunikacie (np. „Cofnij”).
+function toast(msg, ms = 4500, action = null) {
   const el = $('#toast');
   el.textContent = msg;
+  if (action) {
+    const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'toast-action', textContent: action.label });
+    btn.addEventListener('click', () => {
+      el.hidden = true;
+      action.fn();
+    });
+    el.append(btn);
+  }
   el.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.hidden = true; }, ms);
@@ -288,6 +297,115 @@ const entriesLabel = (n) => {
   return `${n} ${n === 1 ? 'wpis' : few ? 'wpisy' : 'wpisów'}`;
 };
 
+// ---------- zaznaczanie (długie przytrzymanie karty lub nagłówka grupy) i usuwanie z „Cofnij” ----------
+const selected = new Set();
+const hiddenIds = new Set(); // usunięte, ale jeszcze do cofnięcia
+let pendingDelete = null; // { ids, timer }
+const UNDO_MS = 6000;
+const LONG_PRESS_MS = 500;
+
+function updateSelectionUI() {
+  for (const el of document.querySelectorAll('#list [data-id]')) el.classList.toggle('selected', selected.has(el.dataset.id));
+  for (const el of document.querySelectorAll('#list [data-ids]')) {
+    el.classList.toggle('selected', el.dataset.ids.split(',').every((id) => selected.has(id)));
+  }
+  $('#select-bar').hidden = !selected.size;
+  $('#select-count').textContent = `Zaznaczono: ${selected.size}`;
+  document.body.classList.toggle('selecting', selected.size > 0);
+}
+
+function toggleSelect(el) {
+  const ids = el.dataset.ids ? el.dataset.ids.split(',') : [el.dataset.id];
+  const all = ids.every((id) => selected.has(id));
+  for (const id of ids) {
+    if (all) selected.delete(id);
+    else selected.add(id);
+  }
+  updateSelectionUI();
+}
+
+function clearSelection() {
+  selected.clear();
+  updateSelectionUI();
+}
+
+// Usunięcie naprawdę (z IndexedDB i — przy synchronizacji — z repo) dopiero po czasie na „Cofnij”.
+async function commitDelete() {
+  if (!pendingDelete) return;
+  const { ids, timer } = pendingDelete;
+  pendingDelete = null;
+  clearTimeout(timer);
+  for (const id of ids) {
+    sync.markDeleted(id);
+    await db.deleteFragment(id);
+    hiddenIds.delete(id);
+  }
+}
+
+async function deleteSelected() {
+  const ids = [...selected].filter((id) => id !== rec?.id);
+  clearSelection();
+  if (!ids.length) return;
+  await commitDelete(); // poprzednie usunięcie przestaje być do cofnięcia
+  ids.forEach((id) => hiddenIds.add(id));
+  renderList();
+  pendingDelete = { ids, timer: setTimeout(commitDelete, UNDO_MS) };
+  toast(`Usunięto ${entriesLabel(ids.length)}.`, UNDO_MS, {
+    label: 'Cofnij',
+    fn: () => {
+      if (pendingDelete?.ids !== ids) return;
+      clearTimeout(pendingDelete.timer);
+      pendingDelete = null;
+      ids.forEach((id) => hiddenIds.delete(id));
+      renderList();
+    },
+  });
+}
+
+{
+  const list = $('#list');
+  let timer = null;
+  let start = null;
+  let suppressClick = false; // po długim przytrzymaniu nie otwieraj karty
+  const target = (e) => e.target.closest('.card, .group-head');
+  list.addEventListener('pointerdown', (e) => {
+    suppressClick = false;
+    const t = target(e);
+    if (!t) return;
+    start = { x: e.clientX, y: e.clientY };
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      suppressClick = true;
+      navigator.vibrate?.(15);
+      toggleSelect(t);
+    }, LONG_PRESS_MS);
+  });
+  const cancel = () => { clearTimeout(timer); timer = null; };
+  list.addEventListener('pointerup', cancel);
+  list.addEventListener('pointercancel', cancel);
+  list.addEventListener('pointermove', (e) => {
+    if (timer && start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) cancel();
+  });
+  // Długie przytrzymanie odnośnika otwiera menu przeglądarki — nie na kartach.
+  list.addEventListener('contextmenu', (e) => { if (target(e)) e.preventDefault(); });
+  list.addEventListener('click', (e) => {
+    const t = target(e);
+    if (!t) return;
+    if (suppressClick) {
+      suppressClick = false;
+      e.preventDefault();
+    } else if (selected.size) {
+      e.preventDefault();
+      toggleSelect(t);
+    }
+  }, true);
+  $('#select-cancel').addEventListener('click', clearSelection);
+  $('#select-delete').addEventListener('click', deleteSelected);
+  // Zamknięcie aplikacji kończy czas na „Cofnij”.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') commitDelete(); });
+}
+
 // `groupHref`: karta w grupie prowadzi do widoku grupy (przewiniętego do tego wpisu).
 function cardHtml(f, groupHref = null) {
   const inGroup = Boolean(groupHref);
@@ -307,7 +425,7 @@ function cardHtml(f, groupHref = null) {
     f.status === 'interrupted' && '⚠ przerwane',
     f.status === 'recording' && '● nagrywanie',
   ].filter(Boolean);
-  return `<a class="card" href="${groupHref || `#/f/${encodeURIComponent(f.id)}`}">
+  return `<a class="card${selected.has(f.id) ? ' selected' : ''}" data-id="${esc(f.id)}" href="${groupHref || `#/f/${encodeURIComponent(f.id)}`}">
     <div class="card-meta">${meta.map(esc).join('<span class="sep">·</span>')}</div>
     <p class="card-text${text ? '' : ' muted'}">${text ? esc(text) : '(bez tekstu)'}</p>
     ${badges.length ? `<div class="card-badges">${badges.map((b) => `<span>${esc(b)}</span>`).join('')}</div>` : ''}
@@ -315,7 +433,7 @@ function cardHtml(f, groupHref = null) {
 }
 
 async function renderList() {
-  const items = await db.getAllFragments();
+  const items = (await db.getAllFragments()).filter((f) => !hiddenIds.has(f.id));
   const list = $('#list');
   if (!items.length) {
     list.innerHTML = '<p class="empty">Nie ma jeszcze żadnych wpisów.</p>';
@@ -343,7 +461,8 @@ async function renderList() {
       entriesLabel(group.length),
     ].filter(Boolean);
     const g = encodeURIComponent(first.id);
-    html += `<div class="group"><a class="group-head" href="#/g/${g}">${head.map(esc).join('<span class="sep">·</span>')}</a>
+    const allSel = group.every((f) => selected.has(f.id));
+    html += `<div class="group"><a class="group-head${allSel ? ' selected' : ''}" data-ids="${esc(group.map((f) => f.id).join(','))}" href="#/g/${g}">${head.map(esc).join('<span class="sep">·</span>')}</a>
       ${group.map((f) => cardHtml(f, `#/g/${g}/${encodeURIComponent(f.id)}`)).join('')}</div>`;
   }
   list.innerHTML = html;
@@ -925,6 +1044,7 @@ async function render() {
     revokeUrls();
     await dropIfEmpty(leaving);
   }
+  if (r.view !== 'list' && selected.size) clearSelection();
   if (r.view !== 'group' && r.view !== 'day') {
     seqObserver?.disconnect();
     seqIds = new Set();

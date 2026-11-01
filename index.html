@@ -9,8 +9,8 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="css/style.css?v=202611011106">
-  <script type="module" src="js/app.js?v=202611011106"></script>
+  <link rel="stylesheet" href="css/style.css?v=202611011112">
+  <script type="module" src="js/app.js?v=202611011112"></script>
 </head>
 <body>
   <header class="topbar">
@@ -18,6 +18,11 @@
     <h1>Dziennik</h1>
     <button type="button" class="icon-btn" id="settings-btn" aria-label="Ustawienia">⚙︎</button>
   </header>
+  <div class="select-bar" id="select-bar" hidden>
+    <button type="button" class="icon-btn" id="select-cancel" aria-label="Zakończ zaznaczanie">✕</button>
+    <span id="select-count"></span>
+    <button type="button" class="btn small" id="select-delete">🗑 Usuń</button>
+  </div>
 
   <main id="view-list">
     <section class="recorder">

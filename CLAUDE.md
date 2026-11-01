@@ -31,6 +31,9 @@ Nowy wpis bez nagrania otwiera się od razu w edycji.
 Grupa i dzień to widoki do czytania: wszystkie wpisy po kolei z nagraniami, tekstem, zdjęciami i dokumentami
 (pliki wczytywane przy przewinięciu, IntersectionObserver). Karta w grupie i nagłówek grupy prowadzą do widoku grupy,
 nagłówek dnia na liście do widoku dnia.
+Lista: długie przytrzymanie karty (albo nagłówka grupy — cała grupa) włącza tryb zaznaczania; dotknięcia zaznaczają
+kolejne karty, pasek u góry ma „Usuń” i ✕. Usunięcie ukrywa wpisy i daje 6 s na „Cofnij”; dopiero potem
+`markDeleted` + `deleteFragment` (także po schowaniu aplikacji).
 Mapka okolicy (OSM, zoom 15, znacznik + kółko dokładności GPS) jest w ramce z miejscem i pogodą wpisu, pod nagłówkiem
 grupy i w widoku dnia przy zmianie miejsca (> 200 m). Kafelki z tile.openstreetmap.org omijają service worker (cache HTTP);
 bez internetu i bez cache mapka się chowa. Dotknięcie otwiera openstreetmap.org. Ikona udostępniania (widoki do czytania): Web Share z tekstem (data, godziny, miejsce, pogoda, transkrypcje, notatki)
