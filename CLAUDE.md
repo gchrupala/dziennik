@@ -21,7 +21,7 @@ Prosta aplikacja webowa (PWA) do nagrywania fragmentów raportu z podróży. Ka�
   (Cache Storage `transformers-cache`),
 - automatycznie zapisuje lokalizację (Geolocation API) i — jeśli jest internet — nazwę miejsca (Nominatim/OSM)
   oraz warunki pogodowe (Open-Meteo, bez klucza API). Brakujące dane uzupełniają się później, gdy wróci internet
-  (pogoda historyczna z danych godzinowych Open-Meteo, do ~3 miesięcy wstecz),
+  (pogoda historyczna z danych godzinowych Open-Meteo: do ~3 miesięcy wstecz z API prognoz, starsze z archiwum ERA5),
 - pozwala dodać zdjęcia, dokumenty i notatkę tekstową; transkrypcję można poprawiać ręcznie.
 
 Bliskie wpisy (następny zaczął się ≤ 10 min po końcu poprzedniego, ten sam dzień, ≤ 200 m albo brak lokalizacji)

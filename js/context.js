@@ -1,5 +1,5 @@
 // Kontekst wpisu: lokalizacja (GPS), nazwa miejsca (Nominatim/OSM) i pogoda (Open-Meteo).
-import { getFragment, getAllFragments, patchFragment, notify } from './db.js?v=202611011206';
+import { getFragment, getAllFragments, patchFragment, notify } from './db.js?v=202611011221';
 
 const busy = new Set();
 export const isBusy = (id) => busy.has(id);
@@ -118,16 +118,27 @@ function normalizeWeather(c, backfilled) {
   };
 }
 
-// Pogoda bieżąca, a dla starszych wpisów — dane godzinowe z chwili nagrania (do ~3 miesięcy wstecz).
+// Pogoda bieżąca, a dla starszych wpisów — dane godzinowe z chwili nagrania: do ~3 miesięcy wstecz z API prognoz,
+// starsze z archiwum Open-Meteo (dane historyczne ERA5, dostępne z kilkudniowym opóźnieniem).
+const ARCHIVE_AFTER_MS = 80 * 864e5;
 async function fetchWeather(lat, lon, at) {
-  const base = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&wind_speed_unit=kmh&timezone=GMT`;
+  const coords = `latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&wind_speed_unit=kmh&timezone=GMT`;
+  const base = `https://api.open-meteo.com/v1/forecast?${coords}`;
   if (Date.now() - at < 45 * 60e3) {
     const j = await fetchJson(`${base}&current=${VARS}`);
     return normalizeWeather(j.current, false);
   }
   const hour = new Date(Math.round(at / 3600e3) * 3600e3).toISOString().slice(0, 16);
-  const j = await fetchJson(`${base}&hourly=${VARS}&start_hour=${hour}&end_hour=${hour}`);
-  const h = j.hourly;
+  let h;
+  if (Date.now() - at > ARCHIVE_AFTER_MS) {
+    const day = hour.slice(0, 10);
+    const j = await fetchJson(`https://archive-api.open-meteo.com/v1/archive?${coords}&hourly=${VARS}&start_date=${day}&end_date=${day}`);
+    const i = j.hourly?.time?.indexOf(hour) ?? -1;
+    if (i < 0) return null;
+    h = Object.fromEntries(Object.keys(j.hourly).map((k) => [k, [j.hourly[k][i]]]));
+  } else {
+    h = (await fetchJson(`${base}&hourly=${VARS}&start_hour=${hour}&end_hour=${hour}`)).hourly;
+  }
   if (!h?.time?.length) return null;
   return normalizeWeather(Object.fromEntries(Object.keys(h).map((k) => [k, h[k][0]])), true);
 }
