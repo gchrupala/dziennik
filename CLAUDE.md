@@ -64,6 +64,8 @@ kind ('audio'|'text'), langs[], transcript, transcribedBy[], transcribing, notes
 wcześniejsze), `manual` (poprawka ręczna); opis w `describeMethods()` (`js/recorder.js`), widoczny w szczegółach i w raporcie MD.
 `transcribing: true` = Whisper kończy w tle (pole tylko do odczytu); po restarcie aplikacji nagranie jest transkrybowane od nowa.
 `attachments` trzyma tylko metadane (`id, kind ('photo'|'document'), name, type, size`); bloby są w `files`.
+Nagranie kończy się samo po ciszy (domyślnie 60 s, Ustawienia → Nagrywanie; `dziennik.autoStop` w localStorage,
+ostatnie 10 s z odliczaniem). Poziom mowy liczony z bloków AudioWorklet (`silentMs()` w `js/recorder.js`), bo działają też przy wygaszonym ekranie.
 Audio jest zapisywane co 10 s w trakcie nagrania, więc przerwane nagranie nie przepada (status `interrupted`).
 
 ## Konwencje

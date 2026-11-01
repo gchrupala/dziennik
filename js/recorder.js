@@ -1,7 +1,7 @@
 // Nagrywanie dźwięku + równoczesna transkrypcja.
 // Z internetem: rozpoznawanie mowy przeglądarki (na żywo). Bez internetu: Whisper na urządzeniu
 // (dźwięk cięty na ~20–28 s fragmenty w miejscach ciszy, tekst pojawia się z kilkunastosekundowym opóźnieniem).
-import * as whisper from './whisper.js?v=202611010954';
+import * as whisper from './whisper.js?v=202611011000';
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -210,7 +210,7 @@ export class RecordingSession {
       tick();
 
       if (this.audioCtx.sampleRate === SR16 && this.audioCtx.audioWorklet) {
-        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611010954', import.meta.url));
+        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611011000', import.meta.url));
         const node = new AudioWorkletNode(this.audioCtx, 'pcm-capture');
         node.port.onmessage = (e) => this.onPcm(e.data);
         source.connect(node);
@@ -238,7 +238,12 @@ export class RecordingSession {
     return true;
   }
 
+  /** Jak długo (ms) w mikrofonie nie było mowy. */
+  silentMs() { return performance.now() - Math.max(this.loudAt || 0, this.startedAt); }
+
   onPcm(block) {
+    // Poziom liczony tu, bo AudioWorklet działa też przy wygaszonym ekranie (requestAnimationFrame nie).
+    if (this.active && whisper.rms(block) > SPEECH_RMS / 2) this.loudAt = performance.now();
     if (!this.active || !this.whisperOn) return;
     this.seg.push(block);
     this.segLen += block.length;

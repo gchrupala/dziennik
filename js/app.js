@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611010954';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611010954';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010954';
-import * as whisper from './whisper.js?v=202611010954';
-import * as sync from './sync.js?v=202611010954';
+import * as db from './db.js?v=202611011000';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011000';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611011000';
+import * as whisper from './whisper.js?v=202611011000';
+import * as sync from './sync.js?v=202611011000';
 
-const APP_VERSION = '202611010954'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011000'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -41,6 +41,14 @@ function toast(msg, ms = 4500) {
 
 // ---------- język transkrypcji ----------
 const LANG_KEY = 'dziennik.lang';
+// Automatyczne zakończenie nagrania po tylu sekundach ciszy (0 = wyłączone).
+const AUTOSTOP_KEY = 'dziennik.autoStop';
+const AUTOSTOP_OPTIONS = [[0, 'nie kończ'], [30, 'po 30 s'], [60, 'po 1 min'], [120, 'po 2 min']];
+const autoStopSec = () => {
+  const v = Number(localStorage.getItem(AUTOSTOP_KEY) ?? 60);
+  return Number.isFinite(v) ? v : 60;
+};
+const SILENCE_WARN_MS = 10000;
 let lang = (() => { try { return localStorage.getItem(LANG_KEY); } catch { return null; } })();
 if (!LANGS.some((l) => l.code === lang)) lang = 'pl-PL';
 
@@ -71,6 +79,7 @@ function setRecordingUI(on) {
   for (const sel of ['#rec-meta', '#rec-chips', '#live']) $(sel).hidden = !on;
   for (const sel of ['#rec-hint', '#text-entry', '#list']) $(sel).hidden = on;
   if (!on) $('#speech-status').hidden = true;
+  if (!on) $('#silence-note').hidden = true;
 }
 
 function renderHint() {
@@ -168,13 +177,35 @@ async function startRecording() {
   renderLive({ text: '', interim: '' });
   const t0 = performance.now();
   $('#timer').textContent = '0:00';
-  rec.timer = setInterval(() => { $('#timer').textContent = fmtDuration(performance.now() - t0); }, 500);
+  rec.timer = setInterval(() => {
+    $('#timer').textContent = fmtDuration(performance.now() - t0);
+    checkSilence(session);
+  }, 500);
   captureContext(id);
   renderRecChips();
   acquireWakeLock();
   navigator.storage?.persist?.().catch(() => {});
   busyRec = false;
   $('#rec-btn').disabled = false;
+}
+
+// Długa cisza → nagranie kończy się samo (ostatnie 10 s z odliczaniem; odezwanie się je przerywa).
+function checkSilence(session) {
+  const limit = autoStopSec() * 1000;
+  const note = $('#silence-note');
+  const left = limit - session.silentMs();
+  if (!limit || !rec || rec.session !== session || left > SILENCE_WARN_MS) {
+    note.hidden = true;
+    return;
+  }
+  if (left <= 0) {
+    note.hidden = true;
+    toast(`Nagranie zakończone po ${autoStopSec()} s ciszy.`);
+    stopRecording();
+    return;
+  }
+  note.textContent = `Cisza — nagranie zakończy się za ${Math.ceil(left / 1000)} s. Powiedz coś, żeby nagrywać dalej.`;
+  note.hidden = false;
 }
 
 function scheduleTranscriptSave() {
@@ -719,11 +750,15 @@ $('#settings-body').addEventListener('click', async (e) => {
 });
 
 $('#settings-body').addEventListener('change', (e) => {
+  if (e.target.id === 'auto-stop') localStorage.setItem(AUTOSTOP_KEY, e.target.value);
   if (e.target.id === 'whisper-always') whisper.setMode(e.target.checked ? 'always' : 'auto');
 });
 
 async function openSettings() {
-  let html = '<h3>Transkrypcja bez internetu</h3><div id="whisper-settings"><p class="muted">…</p></div>';
+  const stopSec = autoStopSec();
+  let html = `<h3>Nagrywanie</h3><label>Zakończ nagranie po ciszy:
+    <select id="auto-stop">${AUTOSTOP_OPTIONS.map(([v, l]) => `<option value="${v}"${v === stopSec ? ' selected' : ''}>${l}</option>`).join('')}</select></label>`;
+  html += '<h3>Transkrypcja bez internetu</h3><div id="whisper-settings"><p class="muted">…</p></div>';
   html += '<h3>Transkrypcja z internetem</h3>';
   html += speechSupported
     ? '<p>Najpierw używane jest rozpoznawanie mowy przeglądarki — tekst pojawia się na żywo. Na Androidzie działa ono też bez internetu, jeśli w telefonie są pobrane języki offline (Ustawienia Androida → rozpoznawanie mowy / Mowa Google → języki offline: polski, hiszpański, angielski). Gdy rozpoznawanie zgłosi brak sieci, aplikacja sama przełącza się na model offline powyżej.</p>'
