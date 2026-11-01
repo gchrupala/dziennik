@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611011029';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011029';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011029';
-import * as whisper from './whisper.js?v=202611011029';
-import * as sync from './sync.js?v=202611011029';
+import * as db from './db.js?v=202611011037';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011037';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011037';
+import * as whisper from './whisper.js?v=202611011037';
+import * as sync from './sync.js?v=202611011037';
 
-const APP_VERSION = '202611011029'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011037'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -276,12 +276,18 @@ $('#text-entry').addEventListener('click', async () => {
 });
 
 // ---------- lista ----------
+const dayKey = (ts) => {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const entriesLabel = (n) => {
   const few = n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14);
   return `${n} ${n === 1 ? 'wpis' : few ? 'wpisy' : 'wpisów'}`;
 };
 
-function cardHtml(f, inGroup = false) {
+// `groupHref`: karta w grupie prowadzi do widoku grupy (przewiniętego do tego wpisu).
+function cardHtml(f, groupHref = null) {
+  const inGroup = Boolean(groupHref);
   const photos = f.attachments.filter((a) => a.kind === 'photo').length;
   const docs = f.attachments.filter((a) => a.kind === 'document').length;
   const meta = [
@@ -298,7 +304,7 @@ function cardHtml(f, inGroup = false) {
     f.status === 'interrupted' && '⚠ przerwane',
     f.status === 'recording' && '● nagrywanie',
   ].filter(Boolean);
-  return `<a class="card" href="#/f/${encodeURIComponent(f.id)}">
+  return `<a class="card" href="${groupHref || `#/f/${encodeURIComponent(f.id)}`}">
     <div class="card-meta">${meta.map(esc).join('<span class="sep">·</span>')}</div>
     <p class="card-text${text ? '' : ' muted'}">${text ? esc(text) : '(bez tekstu)'}</p>
     ${badges.length ? `<div class="card-badges">${badges.map((b) => `<span>${esc(b)}</span>`).join('')}</div>` : ''}
@@ -319,7 +325,7 @@ async function renderList() {
     const first = group[0];
     const day = dayFmt.format(first.createdAt);
     if (day !== lastDay) {
-      html += `<h2 class="day">${esc(day)}</h2>`;
+      html += `<h2 class="day"><a href="#/d/${dayKey(first.createdAt)}">${esc(day)}<span class="read-day">czytaj cały dzień ›</span></a></h2>`;
       lastDay = day;
     }
     if (group.length === 1) {
@@ -333,8 +339,9 @@ async function renderList() {
       weatherShort(group.find((f) => hasWeather(f.weather))?.weather),
       entriesLabel(group.length),
     ].filter(Boolean);
-    html += `<div class="group"><div class="group-head">${head.map(esc).join('<span class="sep">·</span>')}</div>
-      ${group.map((f) => cardHtml(f, true)).join('')}</div>`;
+    const g = encodeURIComponent(first.id);
+    html += `<div class="group"><a class="group-head" href="#/g/${g}">${head.map(esc).join('<span class="sep">·</span>')}</a>
+      ${group.map((f) => cardHtml(f, `#/g/${g}/${encodeURIComponent(f.id)}`)).join('')}</div>`;
   }
   list.innerHTML = html;
 }
@@ -342,6 +349,8 @@ async function renderList() {
 // ---------- szczegóły wpisu ----------
 let currentId = null;
 let editing = false; // szczegóły: domyślnie tylko do czytania; edycja (zmiany, usuwanie) po „Edytuj”
+let openEditing = false; // następne otwarcie wpisu od razu w edycji („Edytuj” w widoku grupy/dnia)
+let returnAfterEdit = false; // „Gotowe” wraca do widoku grupy/dnia
 let audioUrl = null;
 let attachmentUrls = [];
 
@@ -443,7 +452,12 @@ async function renderDetail(id) {
   const view = $('#view-detail');
   const f = await db.getFragment(id);
   revokeUrls();
-  if (currentId !== id) editing = focusNotes; // nowy wpis bez nagrania otwiera się od razu do edycji
+  // Nowy wpis bez nagrania i „Edytuj” z widoku grupy/dnia otwierają się od razu do edycji.
+  if (currentId !== id) {
+    editing = focusNotes || openEditing;
+    returnAfterEdit = openEditing;
+    openEditing = false;
+  }
   currentId = id;
   if (!f) {
     view.innerHTML = '<p class="empty">Nie znaleziono wpisu.</p>';
@@ -505,7 +519,10 @@ async function renderDetail(id) {
   $('#done', view).addEventListener('click', async () => {
     await flushSaves();
     editing = false;
-    renderDetail(id);
+    if (returnAfterEdit) {
+      scrollTarget = id;
+      history.back();
+    } else renderDetail(id);
   });
   $('#add-photo', view).addEventListener('change', (e) => addFiles(id, e.target, 'photo'));
   $('#add-doc', view).addEventListener('change', (e) => addFiles(id, e.target, 'document'));
@@ -567,6 +584,120 @@ function renderReading(f) {
   refreshTranscript(f);
 }
 
+// ---------- czytanie grupy i całego dnia ----------
+let scrollTarget = null; // wpis, do którego przewinąć widok grupy/dnia
+let seqObserver = null;
+let seqIds = new Set(); // wpisy pokazane w widoku grupy/dnia (odświeżanie transkrypcji)
+
+function groupHeadHtml(group) {
+  const first = group[0];
+  const placed = group.find((f) => f.location?.lat != null);
+  const time = group.length > 1
+    ? `${timeFmt.format(first.createdAt)}–${timeFmt.format(group.at(-1).createdAt)}`
+    : timeFmt.format(first.createdAt);
+  const w = group.find((f) => hasWeather(f.weather))?.weather;
+  return [time, placed && placeShort(placed.location), w && `${weatherShort(w)}, ${describeWeather(w).text.toLowerCase()}`]
+    .filter(Boolean).map(esc).join('<span class="sep">·</span>');
+}
+
+function entryHtml(f) {
+  const photos = f.attachments.filter((a) => a.kind === 'photo');
+  const docs = f.attachments.filter((a) => a.kind === 'document');
+  const head = [timeFmt.format(f.createdAt), f.durationMs ? `🎙 ${fmtDuration(f.durationMs)}` : '',
+    f.status === 'interrupted' ? '⚠ przerwane' : '', f.status === 'recording' ? '● nagrywanie' : ''].filter(Boolean);
+  return `<article class="entry" id="e-${esc(f.id)}">
+    <div class="entry-head"><span>${head.map(esc).join(' · ')}</span>
+      ${f.status === 'recording' ? '' : `<button type="button" class="btn small" data-edit="${esc(f.id)}">✎ Edytuj</button>`}</div>
+    ${f.audioId ? `<div class="entry-audio muted" data-lazy="audio" data-file="${esc(f.audioId)}">🎙 nagranie…</div>` : ''}
+    ${f.kind === 'audio' ? `<div class="read-text transcript-read">${readHtml(f.transcript, f.transcribing ? '⏳ Transkrypcja w toku…' : 'Brak transkrypcji.')}</div>` : ''}
+    ${f.notes?.trim() ? `<div class="read-text entry-notes">${readHtml(f.notes, '')}</div>` : ''}
+    ${!f.transcript?.trim() && !f.notes?.trim() && !f.attachments.length && f.kind !== 'audio' ? '<p class="muted">(pusty wpis)</p>' : ''}
+    ${photos.length ? `<div class="photos">${photos.map((a) => `<figure class="photo" data-lazy="photo" data-file="${esc(a.id)}" data-name="${esc(a.name)}"></figure>`).join('')}</div>` : ''}
+    ${docs.length ? `<ul class="docs">${docs.map((a) => `<li data-lazy="doc" data-file="${esc(a.id)}">📄 ${esc(a.name)} <span class="muted">${fmtSize(a.size)}</span></li>`).join('')}</ul>` : ''}
+  </article>`;
+}
+
+// Grupa (`#/g/<id pierwszego wpisu>[/<id wpisu>]`) albo dzień (`#/d/RRRR-MM-DD`): wszystkie wpisy po kolei, do czytania.
+async function renderSequence(r) {
+  const view = $('#view-detail');
+  revokeUrls();
+  seqObserver?.disconnect();
+  const groups = groupFragments(await db.getAllFragments());
+  let shown;
+  let title;
+  if (r.view === 'group') {
+    const g = groups.find((gr) => gr.some((f) => f.id === r.id));
+    shown = g ? [g] : [];
+    if (g) title = dayFmt.format(g[0].createdAt);
+    if (r.at) scrollTarget ??= r.at;
+  } else {
+    shown = groups.filter((gr) => dayKey(gr[0].createdAt) === r.day);
+    title = shown.length ? dayFmt.format(shown[0][0].createdAt) : r.day;
+  }
+  if (!shown.length) {
+    view.innerHTML = '<p class="empty">Nie znaleziono wpisów.</p>';
+    return;
+  }
+  seqIds = new Set(shown.flat().map((f) => f.id));
+  const count = shown.flat().length;
+  view.innerHTML = `
+    <div class="detail-head"><div>
+      <div class="detail-date">${esc(title)}</div>
+      <div class="detail-time">${r.view === 'group' ? groupHeadHtml(shown[0]) : esc(entriesLabel(count))}</div>
+    </div></div>
+    ${shown.map((g) => `<section class="seq-group">
+      ${r.view === 'day' ? `<h3 class="seq-group-head">${groupHeadHtml(g)}</h3>` : ''}
+      ${g.map(entryHtml).join('')}
+    </section>`).join('')}`;
+  seqObserver = new IntersectionObserver((items) => {
+    for (const it of items) {
+      if (!it.isIntersecting) continue;
+      seqObserver.unobserve(it.target);
+      loadLazy(it.target);
+    }
+  }, { rootMargin: '600px 0px' });
+  view.querySelectorAll('[data-lazy]').forEach((el) => seqObserver.observe(el));
+  const target = scrollTarget && document.getElementById(`e-${scrollTarget}`);
+  scrollTarget = null;
+  if (target) target.scrollIntoView();
+  else window.scrollTo(0, 0);
+}
+
+// Nagrania i zdjęcia wczytują się dopiero przy przewinięciu do nich.
+async function loadLazy(el) {
+  const file = await db.getFile(el.dataset.file);
+  if (!el.isConnected) return;
+  if (!file) {
+    if (el.dataset.lazy === 'audio') el.textContent = 'Brak pliku nagrania.';
+    return;
+  }
+  const url = URL.createObjectURL(file.blob);
+  attachmentUrls.push(url);
+  if (el.dataset.lazy === 'audio') {
+    el.classList.remove('muted');
+    el.innerHTML = `<audio controls preload="metadata" src="${url}"></audio>`;
+    fixDuration($('audio', el));
+  } else if (el.dataset.lazy === 'photo') {
+    el.innerHTML = `<button type="button" class="photo-open" data-url="${url}" aria-label="Powiększ ${esc(el.dataset.name)}"><img src="${url}" alt="${esc(el.dataset.name)}"></button>`;
+  } else {
+    el.innerHTML = `<a href="${url}" download="${esc(file.name)}">📄 ${esc(file.name)}</a> <span class="muted">${fmtSize(file.size)}</span>`;
+  }
+}
+
+// Whisper skończył w tle — uaktualnij tekst w widoku grupy/dnia.
+async function refreshSeqEntry(id) {
+  const el = document.querySelector(`#e-${CSS.escape(id)} .transcript-read`);
+  const f = el && await db.getFragment(id);
+  if (f && el.isConnected) el.innerHTML = readHtml(f.transcript, f.transcribing ? '⏳ Transkrypcja w toku…' : 'Brak transkrypcji.');
+}
+
+$('#view-detail').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-edit]');
+  if (!btn) return;
+  openEditing = true;
+  navigate(`#/f/${encodeURIComponent(btn.dataset.edit)}`);
+});
+
 async function renderAudio(f) {
   const slot = $('#audio-slot');
   const file = await db.getFile(f.audioId);
@@ -579,8 +710,11 @@ async function renderAudio(f) {
   slot.classList.remove('muted');
   slot.innerHTML = `<audio controls preload="metadata" src="${audioUrl}"></audio>
     <a class="small-link" href="${audioUrl}" download="${esc(file.name)}">⬇ Pobierz nagranie (${fmtSize(file.size)})</a>`;
-  // Nagrania webm z MediaRecorder nie mają długości w nagłówku — wymuś jej wyliczenie.
-  const audio = $('audio', slot);
+  fixDuration($('audio', slot));
+}
+
+// Nagrania webm z MediaRecorder nie mają długości w nagłówku — wymuś jej wyliczenie.
+function fixDuration(audio) {
   audio.addEventListener('loadedmetadata', () => {
     if (audio.duration !== Infinity && !Number.isNaN(audio.duration)) return;
     audio.currentTime = 1e101;
@@ -697,8 +831,14 @@ async function dropIfEmpty(id) {
 let prevView = null;
 
 function route() {
-  const m = location.hash.match(/^#\/f\/(.+)$/);
-  return m ? { view: 'detail', id: decodeURIComponent(m[1]) } : { view: 'list' };
+  const h = location.hash;
+  let m = h.match(/^#\/f\/(.+)$/);
+  if (m) return { view: 'detail', id: decodeURIComponent(m[1]) };
+  m = h.match(/^#\/g\/([^/]+)(?:\/(.+))?$/);
+  if (m) return { view: 'group', id: decodeURIComponent(m[1]), at: m[2] && decodeURIComponent(m[2]) };
+  m = h.match(/^#\/d\/(\d{4}-\d{2}-\d{2})$/);
+  if (m) return { view: 'day', day: m[1] };
+  return { view: 'list' };
 }
 
 function navigate(hash) {
@@ -707,7 +847,7 @@ function navigate(hash) {
 }
 
 function goBack() {
-  if (prevView === 'list') history.back();
+  if (prevView) history.back(); // wróć tam, skąd przyszliśmy (lista, grupa, dzień)
   else navigate('#/');
 }
 
@@ -719,18 +859,26 @@ async function render() {
   }
   if (currentId && (r.view !== 'detail' || r.id !== currentId)) {
     const leaving = currentId;
+    if (r.view === 'group' || r.view === 'day') scrollTarget ??= leaving; // powrót do miejsca w grupie/dniu
     await flushSaves();
     currentId = null;
     editing = false;
     revokeUrls();
     await dropIfEmpty(leaving);
   }
+  if (r.view !== 'group' && r.view !== 'day') {
+    seqObserver?.disconnect();
+    seqIds = new Set();
+  }
   $('#view-list').hidden = r.view !== 'list';
-  $('#view-detail').hidden = r.view !== 'detail';
+  $('#view-detail').hidden = r.view === 'list';
   $('#back').hidden = r.view === 'list';
   if (r.view === 'list') {
     $('#view-detail').innerHTML = '';
+    revokeUrls();
     await renderList();
+  } else if (r.view === 'group' || r.view === 'day') {
+    await renderSequence(r);
   } else {
     await renderDetail(r.id);
     window.scrollTo(0, 0);
@@ -750,6 +898,7 @@ db.changes.addEventListener('change', (e) => {
   const { id } = e.detail;
   if (rec?.id === id) renderRecChips();
   if (currentId === id) refreshContext(id);
+  if (seqIds.has(id)) refreshSeqEntry(id);
   if (!rec && route().view === 'list') {
     clearTimeout(listTimer);
     listTimer = setTimeout(renderList, 150);

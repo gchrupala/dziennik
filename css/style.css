@@ -359,3 +359,19 @@ code { font-size: .9em; }
 .detail-actions { display: flex; align-items: center; gap: 8px; }
 .edit-note { margin: 10px 0 0; padding: 6px 10px; border-radius: 8px; font-size: 13px; color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* ---------- czytanie grupy / dnia ---------- */
+.day a { color: inherit; text-decoration: none; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.read-day { color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+a.group-head { display: block; color: var(--muted); text-decoration: none; }
+.seq-group { margin-top: 18px; }
+.seq-group-head { margin: 26px 0 4px; padding-bottom: 6px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 14px; font-weight: 600; }
+.seq-group-head .sep, .detail-time .sep { margin: 0 6px; }
+.entry { padding: 14px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 70px; }
+.entry:last-child { border-bottom: 0; }
+.entry-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.entry-audio { margin-bottom: 10px; min-height: 40px; }
+.entry .read-text { margin-bottom: 10px; }
+.entry-notes { padding-left: 10px; border-left: 3px solid var(--line); }
+.entry .photos { margin-top: 6px; }
+.entry .photo:empty { background: var(--line); border-radius: 10px; }

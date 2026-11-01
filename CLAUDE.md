@@ -28,6 +28,9 @@ Bliskie wpisy (następny zaczął się ≤ 10 min po końcu poprzedniego, ten sa
 są grupowane pod jednym nagłówkiem na liście i w `dziennik.md` (`groupFragments()` w `js/context.js`). Dane się nie zmieniają.
 Szczegóły wpisu otwierają się do czytania (bez pól, bez usuwania); „✎ Edytuj” włącza edycję, „✓ Gotowe” ją kończy.
 Nowy wpis bez nagrania otwiera się od razu w edycji.
+Grupa i dzień to widoki do czytania: wszystkie wpisy po kolei z nagraniami, tekstem, zdjęciami i dokumentami
+(pliki wczytywane przy przewinięciu, IntersectionObserver). Karta w grupie i nagłówek grupy prowadzą do widoku grupy,
+nagłówek dnia na liście do widoku dnia. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
 
 Można też utworzyć wpis bez nagrania (sama notatka/zdjęcia + lokalizacja i pogoda).
 Dane są lokalnie w przeglądarce (IndexedDB) i synchronizują się z prywatnym repo **`gchrupala/app-data`**
@@ -49,7 +52,8 @@ JSON/MD zapisywane tylko przy zmianie (brak pustych commitów), konflikt sha →
 ```
 index.html            szkielet UI
 css/style.css         style (mobile-first, jasny/ciemny motyw)
-js/app.js             widoki (lista, szczegóły, nagrywanie, ustawienia), routing przez hash (#/ i #/f/<id>)
+js/app.js             widoki (lista, szczegóły, grupa, dzień, nagrywanie, ustawienia), routing przez hash:
+                      #/ lista, #/f/<id> wpis, #/g/<id pierwszego>[/<id>] grupa, #/d/RRRR-MM-DD dzień
 js/recorder.js        RecordingSession: MediaRecorder + SpeechRecognition (auto-restart, offline, zmiana języka)
 js/whisper.js         Whisper: pobieranie/wybór modelu, kolejka transkrypcji, dekodowanie i cięcie nagrań
 js/whisper-worker.js  worker z transformers.js (import z jsDelivr, wersja przypięta)
