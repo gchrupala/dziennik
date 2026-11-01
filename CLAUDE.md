@@ -25,7 +25,19 @@ Prosta aplikacja webowa (PWA) do nagrywania fragmentów raportu z podróży. Ka�
 - pozwala dodać zdjęcia, dokumenty i notatkę tekstową; transkrypcję można poprawiać ręcznie.
 
 Można też utworzyć wpis bez nagrania (sama notatka/zdjęcia + lokalizacja i pogoda).
-Wszystko jest przechowywane lokalnie w przeglądarce (IndexedDB), bez serwera.
+Dane są lokalnie w przeglądarce (IndexedDB) i synchronizują się z prywatnym repo **`gchrupala/app-data`**
+(GitHub REST API, Contents; fine-grained token wpisany w Ustawieniach, trzymany w localStorage). Układ w repo
+zgodny z innymi aplikacjami (`<profil>/<aplikacja>.json`):
+
+```
+<profil>/dziennik.json      wszystkie wpisy (metadane + lista plików z `path`), `deleted` = usunięte id
+<profil>/dziennik.md        czytelny raport (generowany)
+<profil>/dziennik/<RRRR-MM-DD>_<GGMM>_<id8>/<fileId8>_<nazwa>   nagrania, zdjęcia, dokumenty
+```
+
+Synchronizacja (`js/sync.js`) jest dwukierunkowa: nowszy `updatedAt` wygrywa, brakujące pliki są pobierane/wysyłane,
+JSON/MD zapisywane tylko przy zmianie (brak pustych commitów), konflikt sha → ponowienie. Uruchamia się sama
+(start, powrót internetu, 20 s po zmianie). Commity: `Dziennik: <co> <ISO>`.
 
 ## Struktura
 
@@ -37,6 +49,7 @@ js/recorder.js        RecordingSession: MediaRecorder + SpeechRecognition (auto-
 js/whisper.js         Whisper: pobieranie/wybór modelu, kolejka transkrypcji, dekodowanie i cięcie nagrań
 js/whisper-worker.js  worker z transformers.js (import z jsDelivr, wersja przypięta)
 js/pcm-worklet.js     AudioWorklet zbierający próbki 16 kHz dla Whispera
+js/sync.js            synchronizacja z GitHub (app-data)
 js/context.js         lokalizacja, odwrotne geokodowanie, pogoda, uzupełnianie braków
 js/db.js              IndexedDB: store `fragments` (metadane) i `files` (bloby: audio, zdjęcia, dokumenty)
 sw.js                 service worker: offline, cache jsDelivr (cache-first), nagłówki COOP/COEP (wątki WASM)
@@ -86,4 +99,5 @@ Prawdziwe `SpeechRecognition` w headless Chromium wywraca kartę — zawsze je m
 - Whisper „halucynuje” na ciszy — ciche fragmenty są pomijane; `max_new_tokens` ogranicza zapętlenia.
 - Na Androidzie rozpoznawanie mowy i nagrywanie korzystają z mikrofonu równocześnie; aplikacja przekazuje
   ścieżkę audio do `SpeechRecognition.start(track)` tam, gdzie przeglądarka to obsługuje. Trzeba testować na telefonie.
-- Dane są tylko na urządzeniu — brak eksportu/kopii zapasowej (kandydat na kolejny krok).
+- Synchronizacja wysyła każdy plik osobnym commitem (Contents API); pliki > ~50 MB mogą nie przejść.
+- Pliki już wysłane nie są ponownie wysyłane (załączniki i nagrania się nie zmieniają).

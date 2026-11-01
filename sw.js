@@ -1,5 +1,5 @@
 // Service worker: aplikacja działa offline. Strategia stale-while-revalidate dla plików aplikacji.
-const CACHE = 'dziennik-v2';
+const CACHE = 'dziennik-v3';
 const CDN_CACHE = 'dziennik-cdn-v1'; // biblioteka Whisper (transformers.js, ONNX Runtime) z jsDelivr
 const SHELL = [
   './',
@@ -10,6 +10,7 @@ const SHELL = [
   './js/recorder.js',
   './js/context.js',
   './js/whisper.js',
+  './js/sync.js',
   './js/whisper-worker.js',
   './js/pcm-worklet.js',
   './manifest.webmanifest',

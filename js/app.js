@@ -2,6 +2,7 @@ import * as db from './db.js';
 import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js';
 import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js';
 import * as whisper from './whisper.js';
+import * as sync from './sync.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -416,6 +417,7 @@ async function renderDetail(id) {
   }
   $('#delete', view).addEventListener('click', async () => {
     if (!confirm('Usunąć ten wpis razem z nagraniem i załącznikami?')) return;
+    sync.markDeleted(id);
     await db.deleteFragment(id);
     goBack();
   });
@@ -708,6 +710,7 @@ async function openSettings() {
     html += `<p class="muted">Chrome oferuje też własne rozpoznawanie na urządzeniu (opcjonalnie):</p><ul class="offline-list">${LANGS.map((l) =>
       `<li data-lang="${l.code}"><span>${esc(l.name)}</span><span class="status muted">sprawdzam…</span></li>`).join('')}</ul>`;
   }
+  html += `<h3>Kopia w GitHub</h3><div id="sync-settings">${syncSettingsHtml()}</div>`;
   html += '<h3>Dane</h3><p id="storage-info" class="muted">…</p>';
   $('#settings-body').innerHTML = html;
   if (!$('#settings').open) $('#settings').showModal();
@@ -727,6 +730,45 @@ async function openSettings() {
 
 $('#settings-btn').addEventListener('click', openSettings);
 
+// ---------- kopia w GitHub ----------
+function syncStatusText() {
+  const st = sync.status();
+  if (st.message) return st.message;
+  const last = sync.lastSync();
+  return last ? `Ostatnia synchronizacja: ${dayFmt.format(last)}, ${timeFmt.format(last)}.` : 'Jeszcze nie synchronizowano.';
+}
+
+function syncSettingsHtml() {
+  const s = sync.settings();
+  return `
+    <p class="muted">Wpisy, nagrania i załączniki trafiają do prywatnego repozytorium (plik <code>${esc(s.profile)}/dziennik.json</code>,
+      raport <code>dziennik.md</code> i folder <code>dziennik/</code>). Synchronizacja działa sama, gdy jest internet; na innym urządzeniu
+      wystarczy wpisać ten sam token, a wpisy się pobiorą.</p>
+    <label class="field">Repozytorium<input id="gh-repo" value="${esc(s.repo)}" autocomplete="off" spellcheck="false"></label>
+    <label class="field">Profil (folder w repozytorium)<input id="gh-profile" value="${esc(s.profile)}" autocomplete="off" spellcheck="false"></label>
+    <label class="field">Token GitHub<input id="gh-token" type="password" value="${esc(s.token)}" autocomplete="off" placeholder="github_pat_…"></label>
+    <p class="muted small">Fine-grained token (github.com → Settings → Developer settings) z dostępem tylko do tego repozytorium,
+      uprawnienie <em>Contents: Read and write</em>. Token zostaje tylko na tym urządzeniu.</p>
+    <div class="row"><button type="button" class="btn small" id="gh-save">Zapisz i synchronizuj</button></div>
+    <p class="muted small" id="sync-status" data-error="${sync.status().error}">${esc(syncStatusText())}</p>`;
+}
+
+$('#settings-body').addEventListener('click', async (e) => {
+  if (e.target.id !== 'gh-save') return;
+  sync.saveSettings({ token: $('#gh-token').value, repo: $('#gh-repo').value, profile: $('#gh-profile').value });
+  if (!sync.configured()) return toast('Podaj token GitHub.');
+  sync.sync().then(() => renderList()).catch(() => {});
+});
+
+sync.events.addEventListener('status', () => {
+  const el = $('#sync-status');
+  if (el) {
+    el.textContent = syncStatusText();
+    el.dataset.error = sync.status().error;
+  }
+  if (!sync.status().running && sync.status().error && !$('#settings').open) toast(sync.status().message);
+});
+
 // ---------- start ----------
 async function init() {
   renderLangs();
@@ -743,6 +785,7 @@ async function init() {
     }
   }
   redo.forEach((id) => transcribeFragment(id));
+  sync.startAuto();
   await render();
   backfillContext();
   window.addEventListener('online', () => backfillContext());
