@@ -1,9 +1,9 @@
 // Kopia i synchronizacja z repozytorium GitHub (domyślnie gchrupala/app-data) przez REST API.
 // Układ w repo (jak w innych aplikacjach): <profil>/dziennik.json (wszystkie wpisy, metadane),
 // <profil>/dziennik.md (czytelny raport), <profil>/dziennik/<data>_<id>/<pliki> (nagrania, zdjęcia, dokumenty).
-import * as db from './db.js?v=202611011115';
-import { describeWeather, groupFragments } from './context.js?v=202611011115';
-import { describeMethods } from './recorder.js?v=202611011115';
+import * as db from './db.js?v=202611011118';
+import { describeWeather, groupFragments } from './context.js?v=202611011118';
+import { describeMethods } from './recorder.js?v=202611011118';
 
 const K = { token: 'dziennik.gh.token', repo: 'dziennik.gh.repo', profile: 'dziennik.gh.profile', last: 'dziennik.gh.last', deleted: 'dziennik.deleted', purge: 'dziennik.gh.purge' };
 const ls = {
@@ -120,7 +120,7 @@ const timeFmt = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-d
 const mdLink = (p) => encPath(p).replace(/\(/g, '%28').replace(/\)/g, '%29');
 
 function reportMd(fragments) {
-  const lines = ['# Dziennik podróży', ''];
+  const lines = ['# Dziennik', ''];
   let lastDay = '';
   for (const group of groupFragments(fragments)) {
     const first = group[0];

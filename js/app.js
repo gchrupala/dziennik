@@ -1,13 +1,13 @@
-import * as db from './db.js?v=202611011115';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011115';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011115';
-import * as whisper from './whisper.js?v=202611011115';
-import * as sync from './sync.js?v=202611011115';
-import * as pics from './photos.js?v=202611011115';
-import * as share from './share.js?v=202611011115';
-import { mapHtml, renderMaps } from './map.js?v=202611011115';
+import * as db from './db.js?v=202611011118';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011118';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011118';
+import * as whisper from './whisper.js?v=202611011118';
+import * as sync from './sync.js?v=202611011118';
+import * as pics from './photos.js?v=202611011118';
+import * as share from './share.js?v=202611011118';
+import { mapHtml, renderMaps } from './map.js?v=202611011118';
 
-const APP_VERSION = '202611011115'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011118'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
