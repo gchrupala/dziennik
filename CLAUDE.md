@@ -105,7 +105,9 @@ Prawdziwe `SpeechRecognition` w headless Chromium wywraca kartę — zawsze je m
 - Whisper nie jest strumieniowy: tekst offline pojawia się co ~20–30 s; na wolnym telefonie (model small)
   może nie nadążać — kolejka kończy się po zatrzymaniu nagrania. Dodatkowo przycisk „Transkrybuj nagranie offline”.
 - Whisper „halucynuje” na ciszy — ciche fragmenty są pomijane; `max_new_tokens` ogranicza zapętlenia.
-- Na Androidzie rozpoznawanie mowy i nagrywanie korzystają z mikrofonu równocześnie; aplikacja przekazuje
-  ścieżkę audio do `SpeechRecognition.start(track)` tam, gdzie przeglądarka to obsługuje. Trzeba testować na telefonie.
+- Na Androidzie rozpoznawanie mowy i nagrywanie korzystają z mikrofonu równocześnie. Rozpoznawanie startuje jak
+  w MaxApkach (`start()` bez argumentów). Gdy mikrofon słyszy mowę, a przez 8 s nie ma wyniku, aplikacja próbuje
+  `start(track)` (ścieżka z getUserMedia), a potem Whispera. Po nagraniu bez transkrypcji (albo z takim zacięciem)
+  całe nagranie jest automatycznie przepisywane Whisperem, jeśli model jest pobrany.
 - Synchronizacja wysyła każdy plik osobnym commitem (Contents API); pliki > ~50 MB mogą nie przejść.
 - Pliki już wysłane nie są ponownie wysyłane (załączniki i nagrania się nie zmieniają).

@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611010341';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js?v=202611010341';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010341';
-import * as whisper from './whisper.js?v=202611010341';
-import * as sync from './sync.js?v=202611010341';
+import * as db from './db.js?v=202611010941';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js?v=202611010941';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010941';
+import * as whisper from './whisper.js?v=202611010941';
+import * as sync from './sync.js?v=202611010941';
 
-const APP_VERSION = '202611010341'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611010941'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -198,7 +198,12 @@ async function stopRecording() {
       status: 'done', durationMs: Math.round(r.durationMs), transcript: r.transcript, langs: r.langs, transcribing: r.pending > 0,
     });
     // Whisper kończy ostatnie fragmenty w tle — zapisz pełny tekst, gdy skończy.
-    if (r.pending > 0) r.done.then((transcript) => db.patchFragment(id, { transcript, transcribing: false }));
+    // Rozpoznawanie nic nie dało albo nie dostawało dźwięku — przepisz całe nagranie Whisperem.
+    const redo = (r.stalled || !r.transcript.trim()) && r.blob.size && whisper.ready();
+    if (r.pending > 0) {
+      r.done.then((transcript) => db.patchFragment(id, { transcript, transcribing: false }))
+        .then(() => { if (redo) transcribeFragment(id); });
+    } else if (redo) transcribeFragment(id);
   } catch (err) {
     toast(`Błąd zapisu nagrania: ${err.message}`);
   }

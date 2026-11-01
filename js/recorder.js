@@ -1,7 +1,7 @@
 // Nagrywanie dźwięku + równoczesna transkrypcja.
 // Z internetem: rozpoznawanie mowy przeglądarki (na żywo). Bez internetu: Whisper na urządzeniu
 // (dźwięk cięty na ~20–28 s fragmenty w miejscach ciszy, tekst pojawia się z kilkunastosekundowym opóźnieniem).
-import * as whisper from './whisper.js?v=202611010341';
+import * as whisper from './whisper.js?v=202611010941';
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -38,6 +38,8 @@ const SR16 = whisper.SAMPLE_RATE;
 const SEG_MIN = 18 * SR16; // od tej długości tniemy przy pierwszej ciszy
 const SEG_MAX = 28 * SR16; // twardy limit (okno Whispera to 30 s)
 const SILENCE_RMS = 0.006; // fragment ciszy — nie wysyłamy do Whispera (unika „halucynacji”)
+const SPEECH_RMS = 0.03;   // poziom, przy którym zakładamy, że ktoś mówi
+const STALL_MS = 8000;     // tyle mowy bez żadnego wyniku = rozpoznawanie nie dostaje dźwięku
 
 const join = (...parts) => parts.map((p) => (p || '').trim()).filter(Boolean).join(' ');
 
@@ -136,6 +138,7 @@ export class RecordingSession {
       transcript: this.transcript,
       langs: this.langs,
       pending: this.pending,
+      stalled: Boolean(this.stalled), // rozpoznawanie przeglądarki nie dostawało dźwięku
       // Whisper może jeszcze kończyć ostatnie fragmenty — wynik końcowy:
       done: this.idle.then(() => this.transcript),
     };
@@ -170,13 +173,15 @@ export class RecordingSession {
       const tick = () => {
         if (!this.active) return;
         analyser.getFloatTimeDomainData(buf);
-        this.onLevel?.(Math.min(1, whisper.rms(buf) * 5));
+        const level = whisper.rms(buf);
+        if (level > SPEECH_RMS) this.loudAt = performance.now();
+        this.onLevel?.(Math.min(1, level * 5));
         this.raf = requestAnimationFrame(tick);
       };
       tick();
 
       if (this.audioCtx.sampleRate === SR16 && this.audioCtx.audioWorklet) {
-        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611010341', import.meta.url));
+        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611010941', import.meta.url));
         const node = new AudioWorkletNode(this.audioCtx, 'pcm-capture');
         node.port.onmessage = (e) => this.onPcm(e.data);
         source.connect(node);
@@ -239,7 +244,10 @@ export class RecordingSession {
 
   // ---------- rozpoznawanie mowy przeglądarki ----------
   startSpeech() {
-    this.useTrack = true;
+    // Domyślnie bez ścieżki, jak w MaxApkach (na Androidzie działa). Przekazanie ścieżki z getUserMedia
+    // to zapasowy sposób, gdy rozpoznawanie nie słyszy mikrofonu zajętego przez nagrywanie.
+    this.useTrack = false;
+    this.switchedTrack = false;
     this.failures = 0;
     if (localCapable) {
       for (const { code } of LANGS) {
@@ -271,9 +279,21 @@ export class RecordingSession {
     if (local) rec.processLocally = true;
 
     const t0 = Date.now();
+    const p0 = performance.now();
     let heard = false;
     let error = null;
+    let stalled = false;
     this.srT = null;
+    // Mowa słychać w mikrofonie, a rozpoznawanie nic nie zwraca → spróbuj inaczej.
+    const watchdog = setInterval(() => {
+      if (heard || this.rec !== rec) return clearInterval(watchdog);
+      if (performance.now() - p0 > STALL_MS && this.loudAt > p0 + 1000) {
+        clearInterval(watchdog);
+        stalled = true;
+        this.stalled = true;
+        try { rec.abort(); } catch { /* ignore */ }
+      }
+    }, 1000);
     rec.onresult = (e) => {
       if (!heard) {
         heard = true;
@@ -294,6 +314,7 @@ export class RecordingSession {
     };
     rec.onerror = (e) => { error = e.error; };
     rec.onend = () => {
+      clearInterval(watchdog);
       const text = join(this.sessionFinal, this.interim);
       if (text) this.pieces.push({ t: this.srT ?? this.elapsed(), text });
       this.sessionFinal = '';
@@ -306,7 +327,7 @@ export class RecordingSession {
         this.speechEnded?.();
         return;
       }
-      this.afterEnd({ error, local, quick: !heard && Date.now() - t0 < 1500 });
+      this.afterEnd({ error: stalled ? 'stalled' : error, local, quick: !heard && Date.now() - t0 < 1500 });
     };
 
     this.rec = rec;
@@ -316,7 +337,7 @@ export class RecordingSession {
       if (this.useTrack) rec.start(this.stream.getAudioTracks()[0]);
       else rec.start();
     } catch {
-      try { this.useTrack = false; rec.start(); } catch {
+      try { this.useTrack = !this.useTrack; this.useTrack ? rec.start(this.stream.getAudioTracks()[0]) : rec.start(); } catch {
         this.rec = null;
         this.fail('Nie udało się uruchomić rozpoznawania mowy.');
         return;
@@ -347,8 +368,10 @@ export class RecordingSession {
       this.forceLocal = false;
       return this.respawn(0);
     }
-    if (error === 'audio-capture' && this.useTrack) {
-      this.useTrack = false;
+    if (error === 'stalled' || (error === 'audio-capture' && !this.switchedTrack)) {
+      if (this.switchedTrack) return this.fail('Rozpoznawanie mowy nie zwraca tekstu.');
+      this.switchedTrack = true;
+      this.useTrack = !this.useTrack;
       return this.respawn(0);
     }
     if (FATAL[error]) return this.fail(FATAL[error]);
