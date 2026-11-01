@@ -1,7 +1,7 @@
 // Nagrywanie dźwięku + równoczesna transkrypcja.
 // Z internetem: rozpoznawanie mowy przeglądarki (na żywo). Bez internetu: Whisper na urządzeniu
 // (dźwięk cięty na ~20–28 s fragmenty w miejscach ciszy, tekst pojawia się z kilkunastosekundowym opóźnieniem).
-import * as whisper from './whisper.js?v=202611010943';
+import * as whisper from './whisper.js?v=202611010950';
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -12,6 +12,9 @@ export const LANGS = [
 ];
 
 export const speechSupported = Boolean(SR);
+// Android: rozpoznawanie mowy nie dostaje dźwięku, gdy mikrofon nagrywa (getUserMedia), a każdy jego start
+// pipa (systemowa usługa mowy). Przy pobranym Whisperze używamy więc tylko jego.
+export const isAndroid = /Android/i.test(navigator.userAgent);
 const localCapable = Boolean(SR && typeof SR.available === 'function' && 'processLocally' in SR.prototype);
 
 // Rozpoznawanie mowy na urządzeniu wbudowane w nowsze Chrome.
@@ -131,7 +134,7 @@ export class RecordingSession {
 
     const useWhisper = whisper.ready() && this.pcmOk;
     if (useWhisper) whisper.warmUp();
-    if (useWhisper && whisper.mode() === 'always') {
+    if (useWhisper && (whisper.mode() === 'always' || isAndroid)) {
       this.whisperOnly = true;
       this.setWhisper(true);
     } else if (!SR) {
@@ -207,7 +210,7 @@ export class RecordingSession {
       tick();
 
       if (this.audioCtx.sampleRate === SR16 && this.audioCtx.audioWorklet) {
-        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611010943', import.meta.url));
+        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611010950', import.meta.url));
         const node = new AudioWorkletNode(this.audioCtx, 'pcm-capture');
         node.port.onmessage = (e) => this.onPcm(e.data);
         source.connect(node);
@@ -380,7 +383,7 @@ export class RecordingSession {
   fail(message) {
     this.speechState = 'failed';
     if (this.setWhisper(true) || this.whisperOn) return;
-    this.status('error', `${message} Nagrywam sam dźwięk.`);
+    this.status('error', `${message} Nagrywam sam dźwięk.${isAndroid && !whisper.ready() ? ' Pobierz model offline w Ustawieniach — na Androidzie tylko on daje transkrypcję w trakcie nagrania.' : ''}`);
   }
 
   afterEnd({ error, local, quick }) {
@@ -400,7 +403,8 @@ export class RecordingSession {
       return this.respawn(0);
     }
     if (error === 'stalled' || (error === 'audio-capture' && !this.switchedTrack)) {
-      if (this.switchedTrack) return this.fail('Rozpoznawanie mowy nie zwraca tekstu.');
+      // Na Androidzie każda kolejna próba to pipnięcie — kończymy od razu.
+      if (this.switchedTrack || isAndroid) return this.fail('Rozpoznawanie mowy nie zwraca tekstu.');
       this.switchedTrack = true;
       this.useTrack = !this.useTrack;
       return this.respawn(0);

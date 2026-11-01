@@ -102,13 +102,17 @@ Prawdziwe `SpeechRecognition` w headless Chromium wywraca kartę — zawsze je m
 
 - Transkrypcja na żywo działa w Chrome (Android/desktop) i Safari (iOS/macOS); Firefox nagrywa sam dźwięk.
 - Web Speech na Androidzie idzie przez systemową usługę mowy Google — działa offline, jeśli w telefonie są pobrane
-  języki offline (tak działa w MaxApkach). Dlatego aplikacja zawsze najpierw próbuje Web Speech, a Whisper włącza
-  dopiero po błędzie `network`. `SpeechRecognition.available({processLocally})` (moduł Chrome) na Androidzie
+  języki offline (tak działa w MaxApkach, gdzie nic innego nie używa mikrofonu). Poza Androidem (i bez modelu) aplikacja
+  najpierw próbuje Web Speech, a Whisper włącza dopiero po błędzie `network`. `SpeechRecognition.available({processLocally})` (moduł Chrome) na Androidzie
   zwraca `unavailable` — to nie znaczy, że offline nie działa.
 - Whisper nie jest strumieniowy: tekst offline pojawia się co ~20–30 s; na wolnym telefonie (model small)
   może nie nadążać — kolejka kończy się po zatrzymaniu nagrania. Dodatkowo przycisk „Transkrybuj nagranie offline”.
 - Whisper „halucynuje” na ciszy — ciche fragmenty są pomijane; `max_new_tokens` ogranicza zapętlenia.
-- Na Androidzie rozpoznawanie mowy i nagrywanie korzystają z mikrofonu równocześnie. Rozpoznawanie startuje jak
+- **Android:** rozpoznawanie mowy przeglądarki nie dostaje dźwięku, gdy aplikacja nagrywa (sprawdzone na telefonie,
+  zarówno `start()`, jak i `start(track)`), a każdy jego start pipa (systemowa usługa mowy; strona nie może tego wyłączyć).
+  Dlatego na Androidzie z pobranym modelem transkrypcję na żywo robi tylko Whisper (`isAndroid` w `js/recorder.js`).
+  Bez modelu jest jedna próba; po 8 s mowy bez wyniku aplikacja przestaje próbować (żeby nie pipało).
+- Na innych platformach rozpoznawanie mowy i nagrywanie korzystają z mikrofonu równocześnie. Rozpoznawanie startuje jak
   w MaxApkach (`start()` bez argumentów). Gdy mikrofon słyszy mowę, a przez 8 s nie ma wyniku, aplikacja próbuje
   `start(track)` (ścieżka z getUserMedia), a potem Whispera. Po nagraniu bez transkrypcji (albo z takim zacięciem)
   całe nagranie jest automatycznie przepisywane Whisperem, jeśli model jest pobrany.

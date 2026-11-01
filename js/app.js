@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611010943';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, METHOD, describeMethods, addMethod } from './recorder.js?v=202611010943';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010943';
-import * as whisper from './whisper.js?v=202611010943';
-import * as sync from './sync.js?v=202611010943';
+import * as db from './db.js?v=202611010950';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611010950';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010950';
+import * as whisper from './whisper.js?v=202611010950';
+import * as sync from './sync.js?v=202611010950';
 
-const APP_VERSION = '202611010943'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611010950'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -681,7 +681,8 @@ async function renderWhisperSettings() {
       : '<strong>Pobierz model (raz, przy internecie, najlepiej przez Wi-Fi)</strong>, żeby transkrypcja działała bez sieci.'}</p>
     <ul class="offline-list">${rows.join('')}</ul>
     <label class="check"><input type="checkbox" id="whisper-always" ${whisper.mode() === 'always' ? 'checked' : ''} ${whisper.ready() ? '' : 'disabled'}>
-      Zawsze używaj modelu offline (także z internetem — prywatnie, ale tekst pojawia się z opóźnieniem)</label>`;
+      Zawsze używaj modelu offline (także z internetem — prywatnie, ale tekst pojawia się z opóźnieniem)</label>
+    ${isAndroid ? '<p class="muted small">Na Androidzie model offline jest używany zawsze: rozpoznawanie mowy przeglądarki nie słyszy mikrofonu w trakcie nagrania i pipa przy każdym starcie.</p>' : ''}`;
 }
 
 $('#settings-body').addEventListener('click', async (e) => {
