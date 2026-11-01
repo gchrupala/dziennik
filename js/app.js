@@ -1,13 +1,13 @@
-import * as db from './db.js?v=202611011118';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011118';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011118';
-import * as whisper from './whisper.js?v=202611011118';
-import * as sync from './sync.js?v=202611011118';
-import * as pics from './photos.js?v=202611011118';
-import * as share from './share.js?v=202611011118';
-import { mapHtml, renderMaps } from './map.js?v=202611011118';
+import * as db from './db.js?v=202611011130';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011130';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011130';
+import * as whisper from './whisper.js?v=202611011130';
+import * as sync from './sync.js?v=202611011130';
+import * as pics from './photos.js?v=202611011130';
+import * as share from './share.js?v=202611011130';
+import { mapHtml, renderMaps } from './map.js?v=202611011130';
 
-const APP_VERSION = '202611011118'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011130'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -53,6 +53,26 @@ function toast(msg, ms = 4500, action = null) {
 
 // ---------- język transkrypcji ----------
 const LANG_KEY = 'dziennik.lang';
+
+// Urządzenie (zapisywane we wpisach i w wyniku testu szybkości). Chrome ukrywa model telefonu w zwykłym
+// userAgent — prawdziwy podaje userAgentData.getHighEntropyValues.
+let deviceInfo = null;
+async function getDevice() {
+  if (deviceInfo) return deviceInfo;
+  const ua = navigator.userAgentData;
+  let v = {};
+  try { v = (await ua?.getHighEntropyValues(['model', 'platformVersion', 'fullVersionList'])) || {}; } catch { /* brak */ }
+  const brand = v.fullVersionList?.find((b) => !/Not.?A.?Brand|Chromium/i.test(b.brand));
+  deviceInfo = {
+    model: v.model || null,
+    platform: ua?.platform || navigator.platform || null,
+    platformVersion: v.platformVersion || null,
+    browser: brand ? `${brand.brand} ${brand.version}` : null,
+    userAgent: navigator.userAgent,
+  };
+  return deviceInfo;
+}
+getDevice();
 // Automatyczne zakończenie nagrania po tylu sekundach ciszy (0 = wyłączone).
 const AUTOSTOP_KEY = 'dziennik.autoStop';
 const AUTOSTOP_OPTIONS = [[0, 'nie kończ'], [30, 'po 30 s'], [60, 'po 1 min'], [120, 'po 2 min']];
@@ -175,7 +195,7 @@ async function startRecording() {
     await db.putFragment({
       id, createdAt, updatedAt: createdAt, status: 'recording', kind: 'audio', langs: [lang],
       transcript: '', notes: '', audioId, durationMs: 0, location: null, weather: null, attachments: [],
-      appVersion: APP_VERSION, autoStopSec: autoStopSec(),
+      appVersion: APP_VERSION, autoStopSec: autoStopSec(), device: await getDevice(),
     });
   } catch (err) {
     if (rec) await session.stop().catch(() => {});
@@ -280,7 +300,7 @@ $('#text-entry').addEventListener('click', async () => {
   await db.putFragment({
     id, createdAt: now, updatedAt: now, status: 'done', kind: 'text', langs: [],
     transcript: '', notes: '', audioId: null, durationMs: 0, location: null, weather: null, attachments: [],
-    appVersion: APP_VERSION,
+    appVersion: APP_VERSION, device: await getDevice(),
   });
   captureContext(id);
   focusNotes = true;
@@ -1128,10 +1148,87 @@ async function renderWhisperSettings() {
     <ul class="offline-list">${rows.join('')}</ul>
     <label class="check"><input type="checkbox" id="whisper-always" ${whisper.mode() === 'always' ? 'checked' : ''} ${whisper.ready() ? '' : 'disabled'}>
       Zawsze używaj modelu offline (także z internetem — prywatnie, ale tekst pojawia się z opóźnieniem)</label>
-    ${isAndroid ? '<p class="muted small">Na Androidzie model offline jest używany zawsze: rozpoznawanie mowy przeglądarki nie słyszy mikrofonu w trakcie nagrania i pipa przy każdym starcie.</p>' : ''}`;
+    ${isAndroid ? '<p class="muted small">Na Androidzie model offline jest używany zawsze: rozpoznawanie mowy przeglądarki nie słyszy mikrofonu w trakcie nagrania i pipa przy każdym starcie.</p>' : ''}
+    ${whisper.ready() ? `<button type="button" class="btn small" id="bench-btn">⏱ Test szybkości (procesor / karta graficzna)</button>
+      <div class="bench-out muted small" id="bench-out">${benchSummaryHtml()}</div>` : ''}`;
+}
+
+// ---------- test szybkości Whispera: WASM (procesor) i WebGPU (karta graficzna) ----------
+const BENCH_KEY = 'dziennik.bench';
+const BENCH_SEC = 20;
+const BENCH_LABEL = { wasm: 'Procesor (obecny tryb)', 'webgpu-q8': 'Karta graficzna, ten sam model', 'webgpu-encoder': 'Karta graficzna, koder fp16/q4' };
+const sec = (ms) => (ms / 1000).toFixed(1).replace('.', ',');
+
+function benchLine(cfg, r, audioSec) {
+  if (!r) return `${BENCH_LABEL[cfg]}: czeka`;
+  if (r.running) return `${BENCH_LABEL[cfg]}: ${r.progress != null ? `pobieranie ${r.progress}%` : 'trwa'}…`;
+  if (r.error) return `${BENCH_LABEL[cfg]}: błąd — ${r.error}`;
+  if (r.skipped) return `${BENCH_LABEL[cfg]}: pominięto`;
+  return `${BENCH_LABEL[cfg]}: ${audioSec} s nagrania w ${sec(r.second)} s (pierwszy raz ${sec(r.first)} s, wczytanie ${sec(r.load)} s)`;
+}
+
+function benchSummaryHtml(b = JSON.parse(localStorage.getItem(BENCH_KEY) || 'null')) {
+  if (!b) return '';
+  const lines = [
+    `${b.device?.model || '?'} · ${new Date(b.at).toLocaleString('pl-PL')}`,
+    b.gpu?.available ? `Karta graficzna: ${b.gpu.name || '?'} (fp16: ${b.gpu.f16 ? 'tak' : 'nie'})` : 'Karta graficzna (WebGPU): niedostępna',
+    ...Object.keys(b.results).map((cfg) => benchLine(cfg, b.results[cfg], b.audioSec)),
+  ];
+  return lines.map((l) => `<p>${esc(l)}</p>`).join('');
+}
+
+async function runBench() {
+  const out = $('#bench-out');
+  const btn = $('#bench-btn');
+  let audio = null;
+  let lang = 'pl-PL';
+  for (const f of (await db.getAllFragments()).filter((x) => x.audioId && x.status !== 'recording')) {
+    const file = await db.getFile(f.audioId);
+    if (!file) continue;
+    try {
+      audio = await whisper.decodeBlob(file.blob);
+      lang = f.langs?.[0] || lang;
+      break;
+    } catch { /* następne */ }
+  }
+  if (!audio) return toast('Brak nagrania do testu — nagraj coś najpierw.');
+  audio = audio.slice(0, BENCH_SEC * whisper.SAMPLE_RATE);
+  const b = { at: Date.now(), appVersion: APP_VERSION, device: await getDevice(), audioSec: Math.round(audio.length / whisper.SAMPLE_RATE), model: whisper.installedModel(), results: {} };
+  btn.disabled = true;
+  try {
+    b.gpu = await whisper.gpuInfo();
+    const configs = ['wasm', ...(b.gpu.available ? ['webgpu-q8', 'webgpu-encoder'] : [])];
+    for (const cfg of configs) b.results[cfg] = null;
+    for (const cfg of configs) {
+      if (cfg === 'webgpu-encoder' && !confirm(`Ostatni wariant wymaga pobrania ok. ${b.gpu.f16 ? 177 : 66} MB (koder dla karty graficznej). Pobrać i sprawdzić?`)) {
+        b.results[cfg] = { skipped: true };
+        continue;
+      }
+      b.results[cfg] = { running: true };
+      const show = () => { if (out.isConnected) out.innerHTML = benchSummaryHtml(b); };
+      show();
+      try {
+        const r = await whisper.benchmark(cfg, audio.slice(), lang, (p) => {
+          if (p.status !== 'progress' || !p.total) return;
+          b.results[cfg] = { running: true, progress: Math.round((p.loaded / p.total) * 100) };
+          show();
+        });
+        b.results[cfg] = { load: Math.round(r.load), first: Math.round(r.first), second: Math.round(r.second), text: r.text.slice(0, 200) };
+      } catch (err) {
+        b.results[cfg] = { error: err.message };
+      }
+      localStorage.setItem(BENCH_KEY, JSON.stringify(b)); // po każdym wariancie (przetrwa np. zamknięcie karty)
+    }
+  } finally {
+    btn.disabled = false;
+  }
+  localStorage.setItem(BENCH_KEY, JSON.stringify(b));
+  if (out.isConnected) out.innerHTML = benchSummaryHtml(b);
+  sync.schedule(2000); // wynik trafia do dziennik.json (pole diagnostics)
 }
 
 $('#settings-body').addEventListener('click', async (e) => {
+  if (e.target.closest('#bench-btn')) return runBench();
   const inst = e.target.closest('[data-whisper-install]');
   const rem = e.target.closest('[data-whisper-remove]');
   if (inst && !installing) {

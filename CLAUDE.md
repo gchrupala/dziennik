@@ -78,7 +78,8 @@ icons/                ikony (icon.svg jest źródłem; PNG generowane z niego)
 ```
 
 Model fragmentu (`fragments`): `id, createdAt, updatedAt, status ('recording'|'done'|'interrupted'),
-kind ('audio'|'text'), appVersion, autoStopSec, langs[], transcript, transcribedBy[], transcribing, notes, audioId, durationMs, location, weather, attachments[]`.
+kind ('audio'|'text'), appVersion, autoStopSec, device, langs[], transcript, transcribedBy[], transcribing, notes, audioId, durationMs, location, weather, attachments[]`.
+`device` = { model, platform, platformVersion, browser, userAgent } (model z `userAgentData.getHighEntropyValues`),
 `appVersion` = wersja aplikacji przy tworzeniu wpisu (diagnostyka), `autoStopSec` = ustawienie końca po ciszy w tym nagraniu.
 `transcribedBy[]` = jak powstał tekst, w kolejności: `live-browser` (na żywo, przeglądarka), `live-device` (na żywo,
 `processLocally`), `live-whisper:<model>` (na żywo, Whisper), `whisper:<model>` (po nagraniu, cały plik; zastępuje
@@ -132,6 +133,9 @@ Prawdziwe `SpeechRecognition` w headless Chromium wywraca kartę — zawsze je m
   zwraca `unavailable` — to nie znaczy, że offline nie działa.
 - Whisper nie jest strumieniowy: tekst offline pojawia się co ~20–30 s; na wolnym telefonie (model small)
   może nie nadążać — kolejka kończy się po zatrzymaniu nagrania. Dodatkowo przycisk „Transkrybuj nagranie offline”.
+- Test szybkości Whispera (Ustawienia): ostatnie nagranie (≤ 20 s) w trzech wariantach — procesor (WASM, q8), karta graficzna
+  (WebGPU, q8) i mieszany (koder fp16/q4 na WebGPU, dekoder q8 na WASM; pobiera dodatkowy koder). Wynik z modelem telefonu
+  w localStorage `dziennik.bench` i w `dziennik.json` jako `diagnostics`. Na żywo nadal działa tylko WASM.
 - Whisper „halucynuje” na ciszy — ciche fragmenty są pomijane; `max_new_tokens` ogranicza zapętlenia.
 - **Android:** rozpoznawanie mowy przeglądarki nie dostaje dźwięku, gdy aplikacja nagrywa (sprawdzone na telefonie,
   zarówno `start()`, jak i `start(track)`), a każdy jego start pipa (systemowa usługa mowy; strona nie może tego wyłączyć).

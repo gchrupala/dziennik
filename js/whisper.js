@@ -31,7 +31,7 @@ const waiters = new Map();
 
 function getWorker() {
   if (worker) return worker;
-  worker = new Worker(new URL('./whisper-worker.js?v=202611011118', import.meta.url), { type: 'module' });
+  worker = new Worker(new URL('./whisper-worker.js?v=202611011130', import.meta.url), { type: 'module' });
   worker.onmessage = ({ data }) => {
     const w = waiters.get(data.id);
     if (!w) return;
@@ -109,6 +109,22 @@ export function transcribe(audio, lang) {
     { type: 'transcribe', model, audio, language: lang.slice(0, 2) },
     { transfer: [audio.buffer] },
   )).then((r) => r.text);
+  queue = job.catch(() => {});
+  return job;
+}
+
+/** Informacja o karcie graficznej (WebGPU) widzianej przez przeglądarkę. */
+export const gpuInfo = () => call({ type: 'gpu' }).then((r) => r.gpu);
+
+/**
+ * Test szybkości jednego wariantu ('wasm' | 'webgpu-q8' | 'webgpu-encoder') na próbkach 16 kHz.
+ * Zwraca czasy w ms: wczytanie, pierwsze (rozgrzewka) i drugie przetworzenie, oraz tekst.
+ */
+export function benchmark(config, audio, lang, onProgress) {
+  const model = installedModel();
+  if (!model) return Promise.reject(new Error('Brak pobranego modelu Whisper'));
+  const job = queue.then(() => call({ type: 'bench', model, config, audio, language: lang.slice(0, 2) }, { onProgress }))
+    .then((r) => r.result);
   queue = job.catch(() => {});
   return job;
 }
