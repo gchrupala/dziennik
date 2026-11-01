@@ -37,7 +37,7 @@ kolejne karty, pasek u góry ma „Usuń” i ✕. Usunięcie ukrywa wpisy i daj
 Mapka okolicy (OSM, zoom 15, znacznik + kółko dokładności GPS) jest w ramce z miejscem i pogodą wpisu, pod nagłówkiem
 grupy i w widoku dnia przy zmianie miejsca (> 200 m). Kafelki z tile.openstreetmap.org omijają service worker (cache HTTP);
 bez internetu i bez cache mapka się chowa. Dotknięcie otwiera openstreetmap.org. Ikona udostępniania (widoki do czytania): Web Share z tekstem (data, godziny, miejsce, pogoda, transkrypcje, notatki)
-i zdjęciami (JPEG); tekst idzie też do schowka (Signal przy zdjęciach pomija tekst, WhatsApp nie). Bez Web Share — schowek. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
+i zdjęciami (JPEG); tekst idzie też do schowka (Signal przy zdjęciach pomija tekst, WhatsApp nie). Bez Web Share — schowek. Ikona w nagłówku Ustawień udostępnia link do samej aplikacji. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
 
 Można też utworzyć wpis bez nagrania (sama notatka/zdjęcia + lokalizacja i pogoda).
 Dane są lokalnie w przeglądarce (IndexedDB) i synchronizują się z prywatnym repo **`gchrupala/app-data`**

@@ -411,3 +411,4 @@ details.more summary::-webkit-details-marker { display: none; }
 details.more summary::before { content: '▸ '; }
 details.more[open] summary::before { content: '▾ '; }
 details.more p { margin: 8px 0; }
+.sheet-head h2 { flex: 1; }

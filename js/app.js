@@ -1,13 +1,13 @@
-import * as db from './db.js?v=202611011221';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011221';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011221';
-import * as whisper from './whisper.js?v=202611011221';
-import * as sync from './sync.js?v=202611011221';
-import * as pics from './photos.js?v=202611011221';
-import * as share from './share.js?v=202611011221';
-import { mapHtml, renderMaps } from './map.js?v=202611011221';
+import * as db from './db.js?v=202611011239';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011239';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011239';
+import * as whisper from './whisper.js?v=202611011239';
+import * as sync from './sync.js?v=202611011239';
+import * as pics from './photos.js?v=202611011239';
+import * as share from './share.js?v=202611011239';
+import { mapHtml, renderMaps } from './map.js?v=202611011239';
 
-const APP_VERSION = '202611011221'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011239'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1272,6 +1272,26 @@ sync.events.addEventListener('status', () => {
     el.dataset.error = sync.status().error;
   }
   if (!sync.status().running && sync.status().error && !$('#settings').open) toast(sync.status().message);
+});
+
+// Udostępnienie samej aplikacji (link do instalacji), ikona w nagłówku Ustawień.
+$('#share-app').addEventListener('click', async () => {
+  const url = new URL('./', location.href).href;
+  const text = 'Dziennik — nagrywanie notatek z podróży z transkrypcją, miejscem i pogodą.';
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Dziennik', text, url });
+    } catch (err) {
+      if (err?.name !== 'AbortError') toast(`Nie udało się udostępnić: ${err.message}`);
+    }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Skopiowano link do aplikacji.');
+  } catch {
+    toast(url, 8000);
+  }
 });
 
 // ---------- start ----------
