@@ -1,13 +1,13 @@
-import * as db from './db.js?v=202611011551';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011551';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, samePlace } from './context.js?v=202611011551';
-import * as whisper from './whisper.js?v=202611011551';
-import * as sync from './sync.js?v=202611011551';
-import * as pics from './photos.js?v=202611011551';
-import * as share from './share.js?v=202611011551';
-import { mapHtml, routeMapHtml, renderMaps } from './map.js?v=202611011551';
+import * as db from './db.js?v=202611011557';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011557';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, samePlace } from './context.js?v=202611011557';
+import * as whisper from './whisper.js?v=202611011557';
+import * as sync from './sync.js?v=202611011557';
+import * as pics from './photos.js?v=202611011557';
+import * as share from './share.js?v=202611011557';
+import { mapHtml, routeMapHtml, renderMaps, placeLink } from './map.js?v=202611011557';
 
-const APP_VERSION = '202611011551'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011557'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -561,10 +561,10 @@ function locationHtml(f) {
   const loc = f.location;
   if (!loc) return isBusy(f.id) ? '📍 Ustalam lokalizację…' : '📍 Brak lokalizacji';
   if (loc.error) return `📍 ${esc(loc.error)}`;
-  const map = `https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lon}#map=15/${loc.lat}/${loc.lon}`;
+  const map = placeLink(loc, loc.place);
   const extra = [`±${loc.accuracy} m`, loc.altitude != null ? `${loc.altitude} m n.p.m.` : ''].filter(Boolean).join(', ');
   return `📍 ${loc.place ? `<strong>${esc(loc.place)}</strong><br>` : ''}`
-    + `<a href="${map}" target="_blank" rel="noopener">${coords(loc)}</a> <span class="muted">${esc(extra)}</span>`;
+    + `<a href="${esc(map)}"${map.startsWith('geo:') ? '' : ' target="_blank" rel="noopener"'}>${coords(loc)}</a> <span class="muted">${esc(extra)}</span>`;
 }
 
 function weatherHtml(f) {

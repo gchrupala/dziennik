@@ -7,12 +7,24 @@ const HEIGHT = 170;
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+// Odnośnik do miejsca z pinezką w dokładnym punkcie: na Androidzie `geo:` (aplikacja map z telefonu — Google Maps,
+// OsmAnd…; udostępnianie stamtąd przekazuje ten punkt), na iPhonie Mapy Apple, gdzie indziej OpenStreetMap.
+// (Udostępnianie z openstreetmap.org bierze środek widoku, nie pinezkę.)
+const isAndroid = /Android/i.test(navigator.userAgent);
+const isApple = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+export function placeLink(loc, label = '') {
+  const { lat, lon } = loc;
+  if (isAndroid) return `geo:${lat},${lon}?q=${lat},${lon}${label ? `(${encodeURIComponent(label)})` : ''}`;
+  if (isApple) return `https://maps.apple.com/?ll=${lat},${lon}&q=${encodeURIComponent(label || `${lat},${lon}`)}`;
+  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}`;
+}
+
 /** Miejsce na mapkę (wypełnia ją `renderMaps` po wstawieniu do strony). `loc`: { lat, lon, accuracy? }. */
 export function mapHtml(loc) {
   if (loc?.lat == null) return '';
-  const link = `https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lon}#map=16/${loc.lat}/${loc.lon}`;
+  const link = placeLink(loc, loc.place);
   return `<div class="map" data-lat="${loc.lat}" data-lon="${loc.lon}" data-acc="${loc.accuracy || 0}">
-    <a class="map-tiles" href="${esc(link)}" target="_blank" rel="noopener" aria-label="Otwórz mapę"></a>
+    <a class="map-tiles" href="${esc(link)}"${link.startsWith('geo:') ? '' : ' target="_blank" rel="noopener"'} aria-label="Otwórz mapę"></a>
     <a class="map-attr" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>
   </div>`;
 }

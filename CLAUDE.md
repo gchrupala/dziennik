@@ -41,7 +41,8 @@ kolejne karty, pasek u góry ma „Usuń” i ✕. Usunięcie ukrywa wpisy i daj
 `markDeleted` + `deleteFragment` (także po schowaniu aplikacji).
 Mapka okolicy (OSM, zoom 15, znacznik + kółko dokładności GPS) jest w ramce z miejscem i pogodą wpisu, pod nagłówkiem
 grupy i w widoku dnia przy zmianie miejsca (> 200 m). Kafelki z tile.openstreetmap.org omijają service worker (cache HTTP);
-bez internetu i bez cache mapka się chowa. Dotknięcie otwiera openstreetmap.org. Ikona udostępniania (widoki do czytania): Web Share z tekstem (data, godziny, miejsce, pogoda, transkrypcje, notatki)
+bez internetu i bez cache mapka się chowa. Dotknięcie mapki i współrzędnych (`placeLink()` w `js/map.js`): Android — `geo:`
+(aplikacja map z pinezką w dokładnym punkcie), iPhone — Mapy Apple, inne — openstreetmap.org (jego „Udostępnianie” bierze środek widoku, nie pinezkę). Ikona udostępniania (widoki do czytania): Web Share z tekstem (data, godziny, miejsce, pogoda, transkrypcje, notatki)
 i zdjęciami (JPEG); tekst idzie też do schowka (Signal przy zdjęciach pomija tekst, WhatsApp nie). Bez Web Share — schowek. Ikona w nagłówku Ustawień udostępnia link do samej aplikacji. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
 
 Wyszukiwanie nad listą: transkrypcje, notatki, miejsca, adresy i nazwy załączników; bez względu na wielkość liter
