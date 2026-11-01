@@ -1,9 +1,9 @@
 // Kopia i synchronizacja z repozytorium GitHub (domyślnie gchrupala/app-data) przez REST API.
 // Układ w repo (jak w innych aplikacjach): <profil>/dziennik.json (wszystkie wpisy, metadane),
 // <profil>/dziennik.md (czytelny raport), <profil>/dziennik/<data>_<id>/<pliki> (nagrania, zdjęcia, dokumenty).
-import * as db from './db.js?v=202611011016';
-import { describeWeather } from './context.js?v=202611011016';
-import { describeMethods } from './recorder.js?v=202611011016';
+import * as db from './db.js?v=202611011021';
+import { describeWeather } from './context.js?v=202611011021';
+import { describeMethods } from './recorder.js?v=202611011021';
 
 const K = { token: 'dziennik.gh.token', repo: 'dziennik.gh.repo', profile: 'dziennik.gh.profile', last: 'dziennik.gh.last', deleted: 'dziennik.deleted' };
 const ls = {
@@ -189,10 +189,15 @@ async function runSync(attempt = 0) {
 
     // 3. Wysłanie brakujących plików
     const out = [];
+    const removed = []; // pliki usunięte z wpisu (zdjęcie, dokument) — do skasowania w repo
     let uploaded = 0;
     for (const f of await db.getAllFragments()) {
       if (f.status === 'recording' || deleted.has(f.id)) continue;
-      const already = new Map((remoteById.get(f.id)?.files || []).map((x) => [x.id, x]));
+      const remoteFiles = remoteById.get(f.id)?.files || [];
+      const already = new Map(remoteFiles.map((x) => [x.id, x]));
+      // Decydują metadane wpisu, nie obecność blobu (brak pobranego pliku nie może go skasować w repo).
+      const keep = new Set([f.audioId, ...(f.attachments || []).map((a) => a.id)].filter(Boolean));
+      removed.push(...remoteFiles.filter((x) => !keep.has(x.id)));
       const files = [];
       for (const meta of await localFiles(f)) {
         if (already.has(meta.id)) { files.push(already.get(meta.id)); continue; }
@@ -230,15 +235,13 @@ async function runSync(attempt = 0) {
       }
     }
 
-    // 5. Pliki usuniętych wpisów
-    for (const rf of remote.fragments) {
-      if (!deleted.has(rf.id)) continue;
-      for (const file of rf.files || []) {
-        try {
-          const meta = await gh(`${profile}/${file.path}`);
-          if (meta?.sha) await gh(`${profile}/${file.path}`, { method: 'DELETE', body: { message: commitMsg(`usunięto ${file.name}`), sha: meta.sha } });
-        } catch { /* nie blokuje synchronizacji */ }
-      }
+    // 5. Pliki usuniętych wpisów i usunięte załączniki (po zapisaniu JSON, żeby nie wskazywał brakujących plików)
+    for (const rf of remote.fragments) if (deleted.has(rf.id)) removed.push(...(rf.files || []));
+    for (const file of removed) {
+      try {
+        const meta = await gh(`${profile}/${file.path}`);
+        if (meta?.sha) await gh(`${profile}/${file.path}`, { method: 'DELETE', body: { message: commitMsg(`usunięto ${file.name}`), sha: meta.sha } });
+      } catch { /* nie blokuje synchronizacji */ }
     }
 
     ls.set(K.last, String(Date.now()));

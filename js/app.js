@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611011016';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011016';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611011016';
-import * as whisper from './whisper.js?v=202611011016';
-import * as sync from './sync.js?v=202611011016';
+import * as db from './db.js?v=202611011021';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011021';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611011021';
+import * as whisper from './whisper.js?v=202611011021';
+import * as sync from './sync.js?v=202611011021';
 
-const APP_VERSION = '202611011016'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011021'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

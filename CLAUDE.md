@@ -121,3 +121,5 @@ Prawdziwe `SpeechRecognition` w headless Chromium wywraca kartę — zawsze je m
   całe nagranie jest automatycznie przepisywane Whisperem, jeśli model jest pobrany.
 - Synchronizacja wysyła każdy plik osobnym commitem (Contents API); pliki > ~50 MB mogą nie przejść.
 - Pliki już wysłane nie są ponownie wysyłane (załączniki i nagrania się nie zmieniają).
+- Zdjęcie/dokument usunięte z wpisu (i pliki usuniętych wpisów) są kasowane z repo przy synchronizacji, po zapisaniu JSON.
+  O usunięciu decydują metadane wpisu (`audioId`, `attachments`), nie obecność blobu w IndexedDB.
