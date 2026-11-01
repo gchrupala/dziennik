@@ -412,3 +412,13 @@ details.more summary::before { content: '▸ '; }
 details.more[open] summary::before { content: '▾ '; }
 details.more p { margin: 8px 0; }
 .sheet-head h2 { flex: 1; }
+
+/* ---------- mapka z trasą dnia ---------- */
+.map-route { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.map-route polyline { fill: none; stroke: var(--rec); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 6 5; opacity: .85; }
+.map-route circle { fill: var(--rec); stroke: #fff; stroke-width: 2; }
+.map-route circle.start { fill: #15803d; }
+.map-route circle.end { fill: #1d4ed8; }
+.map-route text { fill: #fff; font: 700 10px system-ui, sans-serif; }
+.map.route { margin: 12px 0 4px; }
+.route-no { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-right: 6px; border-radius: 50%; background: var(--rec); color: #fff; font-size: 11px; font-weight: 700; vertical-align: 1px; }

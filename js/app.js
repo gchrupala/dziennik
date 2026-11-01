@@ -1,13 +1,13 @@
-import * as db from './db.js?v=202611011531';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011531';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011531';
-import * as whisper from './whisper.js?v=202611011531';
-import * as sync from './sync.js?v=202611011531';
-import * as pics from './photos.js?v=202611011531';
-import * as share from './share.js?v=202611011531';
-import { mapHtml, renderMaps } from './map.js?v=202611011531';
+import * as db from './db.js?v=202611011537';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011537';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011537';
+import * as whisper from './whisper.js?v=202611011537';
+import * as sync from './sync.js?v=202611011537';
+import * as pics from './photos.js?v=202611011537';
+import * as share from './share.js?v=202611011537';
+import { mapHtml, routeMapHtml, renderMaps } from './map.js?v=202611011537';
 
-const APP_VERSION = '202611011531'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011537'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -815,13 +815,22 @@ async function renderSequence(r) {
   }
   seqIds = new Set(shown.flat().map((f) => f.id));
   // W widoku dnia miejsce i mapka tylko przy zmianie miejsca (dalej niż 200 m od ostatnio pokazanego); pogoda zawsze.
-  let lastPlace = null;
-  const dayContext = (g) => {
+  // Miejsca dnia (różne o > 200 m) numerowane wg pierwszej wizyty; trasa = kolejność odwiedzin.
+  // `places`: grupa, w której zmienia się miejsce → numer miejsca (przy nagłówku i na mapce).
+  const places = new Map();
+  const route = [];
+  const order = [];
+  for (const g of shown) {
     const loc = g.find((f) => f.location?.lat != null)?.location;
-    const changed = loc && !(lastPlace && distanceM(lastPlace, loc) <= GROUP_DIST_M);
-    if (changed) lastPlace = loc;
-    return groupContextHtml(g, Boolean(changed));
-  };
+    if (!loc || (order.length && distanceM(route[order.at(-1)], loc) <= GROUP_DIST_M)) continue;
+    let i = route.findIndex((p) => distanceM(p, loc) <= GROUP_DIST_M);
+    if (i < 0) i = route.push(loc) - 1;
+    order.push(i);
+    places.set(g, i + 1);
+  }
+  const withRoute = r.view === 'day' && route.length > 1;
+  const dayContext = (g) => groupContextHtml(g, places.has(g));
+  const dayHead = (g) => `<h3 class="seq-group-head">${withRoute && places.has(g) ? `<span class="route-no">${places.get(g)}</span>` : ''}${groupHeadHtml(g)}</h3>`;
   const ids = [...seqIds];
   const count = shown.flat().length;
   view.innerHTML = `
@@ -830,8 +839,9 @@ async function renderSequence(r) {
       <div class="detail-time">${esc(r.view === 'group' ? `${groupTimeText(shown[0])} · ${entriesLabel(count)}` : entriesLabel(count))}</div>
     </div>${shareBtn()}</div>
     ${r.view === 'group' ? groupContextHtml(shown[0]) : ''}
+    ${withRoute ? routeMapHtml(route, order) : ''}
     ${shown.map((g) => `<section class="seq-group">
-      ${r.view === 'day' ? `<h3 class="seq-group-head">${groupHeadHtml(g)}</h3>${dayContext(g)}` : ''}
+      ${r.view === 'day' ? `${dayHead(g)}${dayContext(g)}` : ''}
       ${g.map(entryHtml).join('')}
     </section>`).join('')}`;
   seqObserver = new IntersectionObserver((items) => {
