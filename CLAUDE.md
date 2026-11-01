@@ -69,7 +69,10 @@ Audio jest zapisywane co 10 s w trakcie nagrania, więc przerwane nagranie nie p
   (przypięta wersja w `js/whisper-worker.js`; ONNX Runtime WASM i model są cache'owane przez samą bibliotekę).
 - Interfejs po polsku.
 - Zmiana schematu IndexedDB → podbij `VERSION` w `js/db.js` i dopisz migrację w `onupgradeneeded`.
-- Nowy plik statyczny → dopisz go do `SHELL` w `sw.js`. Przy większych zmianach podbij `CACHE` w `sw.js`.
+- **Wersjonowanie:** przed każdym commitem zmieniającym pliki aplikacji uruchom `tools/bump-version.sh`.
+  Podbija wersję (znacznik czasu UTC) w `?v=…` wszystkich importów/odnośników, w nazwie cache `sw.js` i w `APP_VERSION`
+  (widoczna w Ustawieniach). Nowy import modułu pisz z tym samym `?v=` co pozostałe (inaczej moduł załaduje się dwa razy).
+- Nowy plik statyczny → dopisz go do `SHELL` w `sw.js`.
 
 ## Uruchamianie
 

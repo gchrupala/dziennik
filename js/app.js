@@ -1,8 +1,10 @@
-import * as db from './db.js';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js';
-import * as whisper from './whisper.js';
-import * as sync from './sync.js';
+import * as db from './db.js?v=202611010335';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js?v=202611010335';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010335';
+import * as whisper from './whisper.js?v=202611010335';
+import * as sync from './sync.js?v=202611010335';
+
+const APP_VERSION = '202611010335'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -725,6 +727,7 @@ async function openSettings() {
     est ? `Zajęte miejsce (z modelem): ${fmtSize(est.usage || 0)}.` : '',
     'Wszystko jest zapisane tylko na tym urządzeniu.',
     persisted ? 'Przeglądarka nie usunie danych automatycznie.' : 'Zainstaluj aplikację na ekranie głównym, żeby przeglądarka nie usunęła danych przy braku miejsca.',
+    `Wersja aplikacji: ${APP_VERSION}.`,
   ].filter(Boolean).join(' ');
 }
 

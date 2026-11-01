@@ -1,7 +1,7 @@
 // Nagrywanie dźwięku + równoczesna transkrypcja.
 // Z internetem: rozpoznawanie mowy przeglądarki (na żywo). Bez internetu: Whisper na urządzeniu
 // (dźwięk cięty na ~20–28 s fragmenty w miejscach ciszy, tekst pojawia się z kilkunastosekundowym opóźnieniem).
-import * as whisper from './whisper.js';
+import * as whisper from './whisper.js?v=202611010335';
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -176,7 +176,7 @@ export class RecordingSession {
       tick();
 
       if (this.audioCtx.sampleRate === SR16 && this.audioCtx.audioWorklet) {
-        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js', import.meta.url));
+        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611010335', import.meta.url));
         const node = new AudioWorkletNode(this.audioCtx, 'pcm-capture');
         node.port.onmessage = (e) => this.onPcm(e.data);
         source.connect(node);
