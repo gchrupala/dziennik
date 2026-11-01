@@ -746,7 +746,7 @@ function syncSettingsHtml() {
       wystarczy wpisać ten sam token, a wpisy się pobiorą.</p>
     <label class="field">Repozytorium<input id="gh-repo" value="${esc(s.repo)}" autocomplete="off" spellcheck="false"></label>
     <label class="field">Profil (folder w repozytorium)<input id="gh-profile" value="${esc(s.profile)}" autocomplete="off" spellcheck="false"></label>
-    <label class="field">Token GitHub<input id="gh-token" type="password" value="${esc(s.token)}" autocomplete="off" placeholder="github_pat_…"></label>
+    <label class="field">Token GitHub<input id="gh-token" class="mono" type="text" value="${esc(s.token)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="github_pat_…"></label>
     <p class="muted small">Fine-grained token (github.com → Settings → Developer settings) z dostępem tylko do tego repozytorium,
       uprawnienie <em>Contents: Read and write</em>. Token zostaje tylko na tym urządzeniu.</p>
     <div class="row"><button type="button" class="btn small" id="gh-save">Zapisz i synchronizuj</button></div>

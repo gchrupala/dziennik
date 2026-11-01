@@ -341,3 +341,4 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .row { display: flex; gap: 8px; margin: 10px 0 4px; }
 #sync-status[data-error="true"] { color: var(--warn); }
 code { font-size: .9em; }
+.field input.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; letter-spacing: .02em; word-break: break-all; }
