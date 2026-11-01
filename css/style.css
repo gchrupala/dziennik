@@ -403,3 +403,11 @@ a.group-head.selected { color: var(--accent); }
 .toast-action { margin-left: 14px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
 @media (prefers-color-scheme: light) { .toast-action { color: #5eead4; } }
 .select-bar .btn { color: var(--rec); background: var(--surface); border-color: transparent; }
+
+/* ---------- zwijane wyjaśnienia (Ustawienia) ---------- */
+details.more { margin: 8px 0 4px; font-size: 14px; color: var(--muted); }
+details.more summary { cursor: pointer; color: var(--accent); font-weight: 600; list-style: none; }
+details.more summary::-webkit-details-marker { display: none; }
+details.more summary::before { content: '▸ '; }
+details.more[open] summary::before { content: '▾ '; }
+details.more p { margin: 8px 0; }

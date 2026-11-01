@@ -1,5 +1,5 @@
 // Kontekst wpisu: lokalizacja (GPS), nazwa miejsca (Nominatim/OSM) i pogoda (Open-Meteo).
-import { getFragment, getAllFragments, patchFragment, notify } from './db.js?v=202611011204';
+import { getFragment, getAllFragments, patchFragment, notify } from './db.js?v=202611011206';
 
 const busy = new Set();
 export const isBusy = (id) => busy.has(id);

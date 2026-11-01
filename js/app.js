@@ -1,13 +1,13 @@
-import * as db from './db.js?v=202611011204';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011204';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011204';
-import * as whisper from './whisper.js?v=202611011204';
-import * as sync from './sync.js?v=202611011204';
-import * as pics from './photos.js?v=202611011204';
-import * as share from './share.js?v=202611011204';
-import { mapHtml, renderMaps } from './map.js?v=202611011204';
+import * as db from './db.js?v=202611011206';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011206';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011206';
+import * as whisper from './whisper.js?v=202611011206';
+import * as sync from './sync.js?v=202611011206';
+import * as pics from './photos.js?v=202611011206';
+import * as share from './share.js?v=202611011206';
+import { mapHtml, renderMaps } from './map.js?v=202611011206';
 
-const APP_VERSION = '202611011204'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011206'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1142,94 +1142,13 @@ async function renderWhisperSettings() {
     return `<li><span><strong>${esc(m.name)}</strong> <span class="muted">${esc(m.size)}</span><br><small class="muted">${esc(m.note)}</small></span><span>${action}</span></li>`;
   }));
   box.innerHTML = `
-    <p>${whisper.ready()
-      ? '✓ Transkrypcja bez internetu jest gotowa.'
-      : '<strong>Pobierz model (raz, przy internecie, najlepiej przez Wi-Fi)</strong>, żeby transkrypcja działała bez sieci.'}</p>
+    ${whisper.ready() ? '' : '<p><strong>Pobierz model</strong> (raz, najlepiej przez Wi-Fi), żeby transkrypcja działała bez internetu.</p>'}
     <ul class="offline-list">${rows.join('')}</ul>
-    <label class="check"><input type="checkbox" id="whisper-always" ${whisper.mode() === 'always' ? 'checked' : ''} ${whisper.ready() ? '' : 'disabled'}>
-      Zawsze używaj modelu offline (także z internetem — prywatnie, ale tekst pojawia się z opóźnieniem)</label>
-    ${isAndroid ? '<p class="muted small">Na Androidzie model offline jest używany zawsze: rozpoznawanie mowy przeglądarki nie słyszy mikrofonu w trakcie nagrania i pipa przy każdym starcie.</p>' : ''}
-    ${whisper.ready() ? `<button type="button" class="btn small" id="bench-btn">⏱ Test szybkości (procesor / karta graficzna)</button>
-      <div class="bench-out muted small" id="bench-out">${benchSummaryHtml()}</div>` : ''}`;
-}
-
-// ---------- test szybkości Whispera: WASM (procesor) i WebGPU (karta graficzna) ----------
-const BENCH_KEY = 'dziennik.bench';
-const BENCH_SEC = 20;
-const BENCH_LABEL = { wasm: 'Procesor (obecny tryb)', 'webgpu-q8': 'Karta graficzna, ten sam model', 'webgpu-encoder': 'Karta graficzna, koder fp16/q4' };
-const sec = (ms) => (ms / 1000).toFixed(1).replace('.', ',');
-
-function benchLine(cfg, r, audioSec) {
-  if (!r) return `${BENCH_LABEL[cfg]}: czeka`;
-  if (r.running) return `${BENCH_LABEL[cfg]}: ${r.progress != null ? `pobieranie ${r.progress}%` : 'trwa'}…`;
-  if (r.error) return `${BENCH_LABEL[cfg]}: błąd — ${r.error}`;
-  if (r.skipped) return `${BENCH_LABEL[cfg]}: pominięto`;
-  return `${BENCH_LABEL[cfg]}: ${audioSec} s nagrania w ${sec(r.second)} s (pierwszy raz ${sec(r.first)} s, wczytanie ${sec(r.load)} s)`;
-}
-
-function benchSummaryHtml(b = JSON.parse(localStorage.getItem(BENCH_KEY) || 'null')) {
-  if (!b) return '';
-  const lines = [
-    `${b.device?.model || '?'} · ${new Date(b.at).toLocaleString('pl-PL')}`,
-    b.gpu?.available ? `Karta graficzna: ${b.gpu.name || '?'} (fp16: ${b.gpu.f16 ? 'tak' : 'nie'})` : 'Karta graficzna (WebGPU): niedostępna',
-    ...Object.keys(b.results).map((cfg) => benchLine(cfg, b.results[cfg], b.audioSec)),
-  ];
-  return lines.map((l) => `<p>${esc(l)}</p>`).join('');
-}
-
-async function runBench() {
-  const out = $('#bench-out');
-  const btn = $('#bench-btn');
-  let audio = null;
-  let lang = 'pl-PL';
-  for (const f of (await db.getAllFragments()).filter((x) => x.audioId && x.status !== 'recording')) {
-    const file = await db.getFile(f.audioId);
-    if (!file) continue;
-    try {
-      audio = await whisper.decodeBlob(file.blob);
-      lang = f.langs?.[0] || lang;
-      break;
-    } catch { /* następne */ }
-  }
-  if (!audio) return toast('Brak nagrania do testu — nagraj coś najpierw.');
-  audio = audio.slice(0, BENCH_SEC * whisper.SAMPLE_RATE);
-  const b = { at: Date.now(), appVersion: APP_VERSION, device: await getDevice(), audioSec: Math.round(audio.length / whisper.SAMPLE_RATE), model: whisper.installedModel(), results: {} };
-  btn.disabled = true;
-  try {
-    b.gpu = await whisper.gpuInfo();
-    const configs = ['wasm', ...(b.gpu.available ? ['webgpu-encoder', 'webgpu-q8'] : [])];
-    for (const cfg of configs) b.results[cfg] = null;
-    for (const cfg of configs) {
-      if (cfg === 'webgpu-encoder' && !confirm(`Ostatni wariant wymaga pobrania ok. ${b.gpu.f16 ? 177 : 66} MB (koder dla karty graficznej). Pobrać i sprawdzić?`)) {
-        b.results[cfg] = { skipped: true };
-        continue;
-      }
-      b.results[cfg] = { running: true };
-      const show = () => { if (out.isConnected) out.innerHTML = benchSummaryHtml(b); };
-      show();
-      try {
-        const r = await whisper.benchmark(cfg, audio.slice(), lang, (p) => {
-          if (p.status !== 'progress' || !p.total) return;
-          b.results[cfg] = { running: true, progress: Math.round((p.loaded / p.total) * 100) };
-          show();
-        });
-        b.results[cfg] = { load: Math.round(r.load), first: Math.round(r.first), second: Math.round(r.second), text: r.text.slice(0, 200) };
-      } catch (err) {
-        b.results[cfg] = { error: err.message };
-      }
-      localStorage.setItem(BENCH_KEY, JSON.stringify(b)); // po każdym wariancie (przetrwa np. zamknięcie karty)
-      sync.schedule(2000);
-    }
-  } finally {
-    btn.disabled = false;
-  }
-  localStorage.setItem(BENCH_KEY, JSON.stringify(b));
-  if (out.isConnected) out.innerHTML = benchSummaryHtml(b);
-  sync.schedule(2000); // wynik trafia do dziennik.json (pole diagnostics)
+    ${isAndroid ? '' : `<label class="check"><input type="checkbox" id="whisper-always" ${whisper.mode() === 'always' ? 'checked' : ''} ${whisper.ready() ? '' : 'disabled'}>
+      Zawsze używaj modelu na urządzeniu</label>`}`;
 }
 
 $('#settings-body').addEventListener('click', async (e) => {
-  if (e.target.closest('#bench-btn')) return runBench();
   const inst = e.target.closest('[data-whisper-install]');
   const rem = e.target.closest('[data-whisper-remove]');
   if (inst && !installing) {
@@ -1267,14 +1186,24 @@ async function openSettings() {
   const stopSec = autoStopSec();
   let html = `<h3>Nagrywanie</h3><label>Zakończ nagranie po ciszy:
     <select id="auto-stop">${AUTOSTOP_OPTIONS.map(([v, l]) => `<option value="${v}"${v === stopSec ? ' selected' : ''}>${l}</option>`).join('')}</select></label>`;
-  html += '<h3>Transkrypcja bez internetu</h3><div id="whisper-settings"><p class="muted">…</p></div>';
-  html += '<h3>Transkrypcja z internetem</h3>';
-  html += speechSupported
-    ? '<p>Najpierw używane jest rozpoznawanie mowy przeglądarki — tekst pojawia się na żywo. Na Androidzie działa ono też bez internetu, jeśli w telefonie są pobrane języki offline (Ustawienia Androida → rozpoznawanie mowy / Mowa Google → języki offline: polski, hiszpański, angielski). Gdy rozpoznawanie zgłosi brak sieci, aplikacja sama przełącza się na model offline powyżej.</p>'
-    : '<p class="muted">Ta przeglądarka nie ma rozpoznawania mowy na żywo — używany jest tylko model offline.</p>';
-  html += '<div id="chrome-offline"></div>';
+  html += `<h3>Transkrypcja</h3>
+    <p class="muted small">Model na telefonie (działa też bez internetu):</p>
+    <div id="whisper-settings"><p class="muted">…</p></div>
+    <p class="muted small">Po synchronizacji nagrania przepisuje jeszcze dokładniejszy model na GitHubie (Whisper large-v3-turbo).</p>
+    <details class="more"><summary>Jak to działa</summary>
+      <p>W trakcie nagrania tekst tworzy model na telefonie (Whisper) — pojawia się co ok. 20–30 s, a krótkie nagrania
+        są przepisywane dopiero po zakończeniu. ${isAndroid
+          ? 'Na Androidzie rozpoznawanie mowy przeglądarki nie jest używane: nie słyszy mikrofonu w trakcie nagrania i pipa przy każdym starcie.'
+          : speechSupported
+            ? 'Z internetem najpierw używane jest rozpoznawanie mowy przeglądarki (tekst na żywo); przy braku sieci aplikacja sama przełącza się na model na telefonie.'
+            : 'Ta przeglądarka nie ma rozpoznawania mowy na żywo.'}</p>
+      <p>Model „Dokładny (small)” jest wyraźnie lepszy po polsku niż „Szybki (base)”. Model pobiera się raz i zostaje w pamięci przeglądarki.</p>
+      <p>Na GitHubie każde nowe nagranie przepisuje Whisper large-v3-turbo (GitHub Actions w repozytorium kopii). Tekst przychodzi
+        po kilku minutach i zastępuje wcześniejszy; transkrypcji poprawionych ręcznie nie zmienia.</p>
+      <div id="chrome-offline"></div>
+    </details>`;
   html += `<h3>Kopia w GitHub</h3><div id="sync-settings">${syncSettingsHtml()}</div>`;
-  html += '<h3>Dane</h3><p id="storage-info" class="muted">…</p>';
+  html += '<h3>Dane</h3><p id="storage-info" class="muted small">…</p>';
   $('#settings-body').innerHTML = html;
   if (!$('#settings').open) $('#settings').showModal();
   renderWhisperSettings();
@@ -1284,12 +1213,11 @@ async function openSettings() {
   const est = await navigator.storage?.estimate?.().catch(() => null);
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   $('#storage-info').textContent = [
-    `Wpisów: ${count}.`,
-    est ? `Zajęte miejsce (z modelem): ${fmtSize(est.usage || 0)}.` : '',
-    'Wszystko jest zapisane tylko na tym urządzeniu.',
-    persisted ? 'Przeglądarka nie usunie danych automatycznie.' : 'Zainstaluj aplikację na ekranie głównym, żeby przeglądarka nie usunęła danych przy braku miejsca.',
-    `Wersja aplikacji: ${APP_VERSION}.`,
-  ].filter(Boolean).join(' ');
+    `Wpisów: ${count}`,
+    est ? `zajęte: ${fmtSize(est.usage || 0)}` : '',
+    sync.configured() ? 'kopia: GitHub' : 'tylko na tym urządzeniu',
+    `wersja ${APP_VERSION}`,
+  ].filter(Boolean).join(' · ') + (persisted ? '' : '. Zainstaluj aplikację na ekranie głównym, żeby przeglądarka nie usunęła danych przy braku miejsca.');
 }
 
 $('#settings-btn').addEventListener('click', openSettings);
@@ -1300,7 +1228,7 @@ async function renderChromeOffline() {
   if (!box || !speechSupported || !offlineSpeech.supported) return;
   const statuses = await Promise.all(LANGS.map((l) => offlineSpeech.status(l.code)));
   if (statuses.every((st) => st === 'unavailable')) return;
-  box.innerHTML = `<p class="muted">Chrome oferuje też własne rozpoznawanie na urządzeniu (opcjonalnie):</p><ul class="offline-list">${LANGS.map((l) =>
+  box.innerHTML = `<p>Chrome oferuje też własne rozpoznawanie na urządzeniu (opcjonalnie):</p><ul class="offline-list">${LANGS.map((l) =>
     `<li data-lang="${l.code}"><span>${esc(l.name)}</span><span class="status muted">sprawdzam…</span></li>`).join('')}</ul>`;
   LANGS.forEach((l) => updateOfflineRow(l.code));
 }
@@ -1316,16 +1244,18 @@ function syncStatusText() {
 function syncSettingsHtml() {
   const s = sync.settings();
   return `
-    <p class="muted">Wpisy, nagrania i załączniki trafiają do prywatnego repozytorium (plik <code>${esc(s.profile)}/dziennik.json</code>,
-      raport <code>dziennik.md</code> i folder <code>dziennik/</code>). Synchronizacja działa sama, gdy jest internet; na innym urządzeniu
-      wystarczy wpisać ten sam token, a wpisy się pobiorą.</p>
     <label class="field">Repozytorium<input id="gh-repo" value="${esc(s.repo)}" autocomplete="off" spellcheck="false"></label>
     <label class="field">Profil (folder w repozytorium)<input id="gh-profile" value="${esc(s.profile)}" autocomplete="off" spellcheck="false"></label>
     <label class="field">Token GitHub<input id="gh-token" class="mono" type="text" value="${esc(s.token)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="github_pat_…"></label>
-    <p class="muted small">Fine-grained token (github.com → Settings → Developer settings) z dostępem tylko do tego repozytorium,
-      uprawnienie <em>Contents: Read and write</em>. Token zostaje tylko na tym urządzeniu.</p>
     <div class="row"><button type="button" class="btn small" id="gh-save">Zapisz i synchronizuj</button></div>
-    <p class="muted small" id="sync-status" data-error="${sync.status().error}">${esc(syncStatusText())}</p>`;
+    <p class="muted small" id="sync-status" data-error="${sync.status().error}">${esc(syncStatusText())}</p>
+    <details class="more"><summary>Szczegóły</summary>
+      <p>Wpisy, nagrania i załączniki trafiają do prywatnego repozytorium: <code>${esc(s.profile)}/dziennik.json</code>,
+        raport <code>${esc(s.profile)}/dziennik.md</code> i folder <code>${esc(s.profile)}/dziennik/</code>. Synchronizacja działa sama,
+        gdy jest internet; na innym urządzeniu wystarczy wpisać ten sam token.</p>
+      <p>Token: fine-grained (github.com → Settings → Developer settings) z dostępem tylko do tego repozytorium,
+        uprawnienie <em>Contents: Read and write</em>. Zostaje tylko na tym urządzeniu.</p>
+    </details>`;
 }
 
 $('#settings-body').addEventListener('click', async (e) => {

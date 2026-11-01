@@ -1,6 +1,6 @@
 // Service worker: aplikacja działa offline. Pliki aplikacji: najpierw sieć (z pominięciem cache HTTP),
 // a gdy jej brak lub odpowiada zbyt wolno — kopia z cache.
-const VERSION = '202611011204'; // podbijaj skryptem tools/bump-version.sh
+const VERSION = '202611011206'; // podbijaj skryptem tools/bump-version.sh
 const CACHE = `dziennik-${VERSION}`;
 const CDN_CACHE = 'dziennik-cdn-v1'; // biblioteka Whisper (transformers.js, ONNX Runtime) z jsDelivr
 const SHELL = [

@@ -1,9 +1,9 @@
 // Kopia i synchronizacja z repozytorium GitHub (domyślnie gchrupala/app-data) przez REST API.
 // Układ w repo (jak w innych aplikacjach): <profil>/dziennik.json (wszystkie wpisy, metadane),
 // <profil>/dziennik.md (czytelny raport), <profil>/dziennik/<data>_<id>/<pliki> (nagrania, zdjęcia, dokumenty).
-import * as db from './db.js?v=202611011204';
-import { describeWeather, groupFragments } from './context.js?v=202611011204';
-import { describeMethods } from './recorder.js?v=202611011204';
+import * as db from './db.js?v=202611011206';
+import { describeWeather, groupFragments } from './context.js?v=202611011206';
+import { describeMethods } from './recorder.js?v=202611011206';
 
 const K = { token: 'dziennik.gh.token', repo: 'dziennik.gh.repo', profile: 'dziennik.gh.profile', last: 'dziennik.gh.last', deleted: 'dziennik.deleted', purge: 'dziennik.gh.purge' };
 const ls = {
@@ -255,11 +255,7 @@ async function runSync(attempt = 0) {
     savePurge([...purgeList(), ...removed.map((f) => f.path)]);
 
     // 4. dziennik.json + dziennik.md
-    // Wynik testu szybkości Whispera z modelem telefonu (Ustawienia) — do diagnostyki.
-    let bench = null;
-    try { bench = JSON.parse(ls.get('dziennik.bench') || 'null'); } catch { /* ignore */ }
-    const diagnostics = bench || remote.diagnostics;
-    const next = { dziennik: 1, fragments: out.sort((a, b) => a.createdAt - b.createdAt), deleted: [...deleted], ...(diagnostics ? { diagnostics } : {}) };
+    const next = { dziennik: 1, fragments: out.sort((a, b) => a.createdAt - b.createdAt), deleted: [...deleted] };
     const nextText = JSON.stringify(next, null, 1);
     if (nextText !== remoteFile.text) {
       await gh(jsonPath, {
