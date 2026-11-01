@@ -31,7 +31,7 @@ const waiters = new Map();
 
 function getWorker() {
   if (worker) return worker;
-  worker = new Worker(new URL('./whisper-worker.js?v=202611011130', import.meta.url), { type: 'module' });
+  worker = new Worker(new URL('./whisper-worker.js?v=202611011140', import.meta.url), { type: 'module' });
   worker.onmessage = ({ data }) => {
     const w = waiters.get(data.id);
     if (!w) return;
@@ -120,13 +120,26 @@ export const gpuInfo = () => call({ type: 'gpu' }).then((r) => r.gpu);
  * Test szybkości jednego wariantu ('wasm' | 'webgpu-q8' | 'webgpu-encoder') na próbkach 16 kHz.
  * Zwraca czasy w ms: wczytanie, pierwsze (rozgrzewka) i drugie przetworzenie, oraz tekst.
  */
-export function benchmark(config, audio, lang, onProgress) {
+// Każdy wariant w osobnym wątku: nie blokuje transkrypcji, a zawieszony wariant można zamknąć po czasie.
+export function benchmark(config, audio, lang, onProgress, timeoutMs = 180000) {
   const model = installedModel();
   if (!model) return Promise.reject(new Error('Brak pobranego modelu Whisper'));
-  const job = queue.then(() => call({ type: 'bench', model, config, audio, language: lang.slice(0, 2) }, { onProgress }))
-    .then((r) => r.result);
-  queue = job.catch(() => {});
-  return job;
+  const w = new Worker(new URL('./whisper-worker.js?v=202611011140', import.meta.url), { type: 'module' });
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      w.terminate();
+      reject(new Error(`przerwano po ${timeoutMs >= 60000 ? `${Math.round(timeoutMs / 60000)} min` : `${Math.round(timeoutMs / 1000)} s`}`));
+    }, timeoutMs);
+    const end = () => { clearTimeout(timer); w.terminate(); };
+    w.onmessage = ({ data }) => {
+      if (data.type === 'progress') return onProgress?.(data.progress);
+      end();
+      if (data.type === 'error') reject(new Error(data.message));
+      else resolve(data.result);
+    };
+    w.onerror = (e) => { end(); reject(new Error(e.message || 'Błąd modułu Whisper')); };
+    w.postMessage({ id: 1, type: 'bench', model, config, audio, language: lang.slice(0, 2) });
+  });
 }
 
 /** Dekoduje zapisane nagranie do 16 kHz mono. */

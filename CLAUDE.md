@@ -134,7 +134,7 @@ Prawdziwe `SpeechRecognition` w headless Chromium wywraca kartę — zawsze je m
 - Whisper nie jest strumieniowy: tekst offline pojawia się co ~20–30 s; na wolnym telefonie (model small)
   może nie nadążać — kolejka kończy się po zatrzymaniu nagrania. Dodatkowo przycisk „Transkrybuj nagranie offline”.
 - Test szybkości Whispera (Ustawienia): ostatnie nagranie (≤ 20 s) w trzech wariantach — procesor (WASM, q8), karta graficzna
-  (WebGPU, q8) i mieszany (koder fp16/q4 na WebGPU, dekoder q8 na WASM; pobiera dodatkowy koder). Wynik z modelem telefonu
+  (WebGPU, q8) i mieszany (koder fp16/q4 na WebGPU, dekoder q8 na WASM; pobiera dodatkowy koder). Każdy wariant w osobnym wątku, limit 3 min. Wynik z modelem telefonu
   w localStorage `dziennik.bench` i w `dziennik.json` jako `diagnostics`. Na żywo nadal działa tylko WASM.
 - Whisper „halucynuje” na ciszy — ciche fragmenty są pomijane; `max_new_tokens` ogranicza zapętlenia.
 - **Android:** rozpoznawanie mowy przeglądarki nie dostaje dźwięku, gdy aplikacja nagrywa (sprawdzone na telefonie,
