@@ -1,7 +1,7 @@
 // Nagrywanie dźwięku + równoczesna transkrypcja.
 // Z internetem: rozpoznawanie mowy przeglądarki (na żywo). Bez internetu: Whisper na urządzeniu
 // (dźwięk cięty na ~20–28 s fragmenty w miejscach ciszy, tekst pojawia się z kilkunastosekundowym opóźnieniem).
-import * as whisper from './whisper.js?v=202611011006';
+import * as whisper from './whisper.js?v=202611011016';
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -42,6 +42,7 @@ const SEG_MIN = 18 * SR16; // od tej długości tniemy przy pierwszej ciszy
 const SEG_MAX = 28 * SR16; // twardy limit (okno Whispera to 30 s)
 const SILENCE_RMS = 0.006; // fragment ciszy — nie wysyłamy do Whispera (unika „halucynacji”)
 const SPEECH_RMS = 0.03;   // poziom, przy którym zakładamy, że ktoś mówi
+const SPEECH_BLOCK_RMS = 0.02; // to samo dla bloków 0,25 s z AudioWorklet (średnia, więc niżej)
 const STALL_MS = 8000;     // tyle mowy bez żadnego wyniku = rozpoznawanie nie dostaje dźwięku
 
 // Sposoby powstania transkrypcji (pole `transcribedBy` wpisu), w kolejności pojawienia się.
@@ -203,14 +204,14 @@ export class RecordingSession {
         if (!this.active) return;
         analyser.getFloatTimeDomainData(buf);
         const level = whisper.rms(buf);
-        if (level > SPEECH_RMS) this.loudAt = performance.now();
+        if (!this.pcmOk && level > SPEECH_RMS) this.loudAt = performance.now(); // gdy brak AudioWorklet
         this.onLevel?.(Math.min(1, level * 5));
         this.raf = requestAnimationFrame(tick);
       };
       tick();
 
       if (this.audioCtx.sampleRate === SR16 && this.audioCtx.audioWorklet) {
-        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611011006', import.meta.url));
+        await this.audioCtx.audioWorklet.addModule(new URL('./pcm-worklet.js?v=202611011016', import.meta.url));
         const node = new AudioWorkletNode(this.audioCtx, 'pcm-capture');
         node.port.onmessage = (e) => this.onPcm(e.data);
         source.connect(node);
@@ -243,7 +244,9 @@ export class RecordingSession {
 
   onPcm(block) {
     // Poziom liczony tu, bo AudioWorklet działa też przy wygaszonym ekranie (requestAnimationFrame nie).
-    if (this.active && whisper.rms(block) > SPEECH_RMS / 2) this.loudAt = performance.now();
+    // Za mowę uznajemy tylko dłuższy dźwięk: 3 z 4 ostatnich bloków po 0,25 s (krótkie stuknięcie się nie liczy).
+    this.recentLoud = [...(this.recentLoud || []).slice(-3), whisper.rms(block) > SPEECH_BLOCK_RMS];
+    if (this.active && this.recentLoud.filter(Boolean).length >= 3) this.loudAt = performance.now();
     if (!this.active || !this.whisperOn) return;
     this.seg.push(block);
     this.segLen += block.length;
