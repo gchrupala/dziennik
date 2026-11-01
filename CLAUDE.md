@@ -144,4 +144,6 @@ Prawdziwe `SpeechRecognition` w headless Chromium wywraca kartę — zawsze je m
 - Synchronizacja wysyła każdy plik osobnym commitem (Contents API); pliki > ~50 MB mogą nie przejść.
 - Pliki już wysłane nie są ponownie wysyłane (załączniki i nagrania się nie zmieniają).
 - Zdjęcie/dokument usunięte z wpisu (i pliki usuniętych wpisów) są kasowane z repo przy synchronizacji, po zapisaniu JSON.
+  Ścieżki do skasowania są najpierw zapisywane w localStorage (`dziennik.gh.purge`), więc przerwana synchronizacja dokończy
+  kasowanie następnym razem. `dziennik.md` jest porównywany przy każdej synchronizacji (nie tylko przy zmianie JSON).
   O usunięciu decydują metadane wpisu (`audioId`, `attachments`), nie obecność blobu w IndexedDB.

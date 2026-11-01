@@ -1,11 +1,11 @@
 // Kopia i synchronizacja z repozytorium GitHub (domyślnie gchrupala/app-data) przez REST API.
 // Układ w repo (jak w innych aplikacjach): <profil>/dziennik.json (wszystkie wpisy, metadane),
 // <profil>/dziennik.md (czytelny raport), <profil>/dziennik/<data>_<id>/<pliki> (nagrania, zdjęcia, dokumenty).
-import * as db from './db.js?v=202611011112';
-import { describeWeather, groupFragments } from './context.js?v=202611011112';
-import { describeMethods } from './recorder.js?v=202611011112';
+import * as db from './db.js?v=202611011115';
+import { describeWeather, groupFragments } from './context.js?v=202611011115';
+import { describeMethods } from './recorder.js?v=202611011115';
 
-const K = { token: 'dziennik.gh.token', repo: 'dziennik.gh.repo', profile: 'dziennik.gh.profile', last: 'dziennik.gh.last', deleted: 'dziennik.deleted' };
+const K = { token: 'dziennik.gh.token', repo: 'dziennik.gh.repo', profile: 'dziennik.gh.profile', last: 'dziennik.gh.last', deleted: 'dziennik.deleted', purge: 'dziennik.gh.purge' };
 const ls = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { if (v == null || v === '') localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* ignore */ } },
@@ -31,6 +31,11 @@ export function markDeleted(id) {
   t.add(id);
   ls.set(K.deleted, JSON.stringify([...t]));
 }
+
+// Pliki do skasowania w repo (ścieżki względem profilu). Zapisywane przed zapisem dziennik.json, usuwane po skasowaniu —
+// przerwana synchronizacja dokończy kasowanie następnym razem (zdalny JSON już tych plików nie wymienia).
+const purgeList = () => { try { return JSON.parse(ls.get(K.purge) || '[]'); } catch { return []; } };
+const savePurge = (paths) => ls.set(K.purge, paths.length ? JSON.stringify([...new Set(paths)]) : '');
 
 export const events = new EventTarget();
 let state = { running: false, message: '', error: false };
@@ -245,6 +250,10 @@ async function runSync(attempt = 0) {
       out.push({ ...rest, files });
     }
 
+    // Pliki usuniętych wpisów i usunięte załączniki — zapamiętaj przed zapisem JSON (patrz purgeList).
+    for (const rf of remote.fragments) if (deleted.has(rf.id)) removed.push(...(rf.files || []));
+    savePurge([...purgeList(), ...removed.map((f) => f.path)]);
+
     // 4. dziennik.json + dziennik.md
     const next = { dziennik: 1, fragments: out.sort((a, b) => a.createdAt - b.createdAt), deleted: [...deleted] };
     const nextText = JSON.stringify(next, null, 1);
@@ -253,23 +262,27 @@ async function runSync(attempt = 0) {
         method: 'PUT',
         body: { message: commitMsg('wpisy'), content: await b64FromText(nextText), ...(remoteFile.sha ? { sha: remoteFile.sha } : {}) },
       });
-      const md = await readText(`${profile}/dziennik.md`);
-      const mdText = reportMd(next.fragments);
-      if (mdText !== md.text) {
-        await gh(`${profile}/dziennik.md`, {
-          method: 'PUT',
-          body: { message: commitMsg('raport'), content: await b64FromText(mdText), ...(md.sha ? { sha: md.sha } : {}) },
-        });
-      }
+    }
+    // Raport sprawdzany zawsze (nie tylko przy zmianie JSON) — przerwana synchronizacja go dokończy.
+    const md = await readText(`${profile}/dziennik.md`);
+    const mdText = reportMd(next.fragments);
+    if (mdText !== md.text) {
+      await gh(`${profile}/dziennik.md`, {
+        method: 'PUT',
+        body: { message: commitMsg('raport'), content: await b64FromText(mdText), ...(md.sha ? { sha: md.sha } : {}) },
+      });
     }
 
-    // 5. Pliki usuniętych wpisów i usunięte załączniki (po zapisaniu JSON, żeby nie wskazywał brakujących plików)
-    for (const rf of remote.fragments) if (deleted.has(rf.id)) removed.push(...(rf.files || []));
-    for (const file of removed) {
+    // 5. Kasowanie plików (po zapisaniu JSON, żeby nie wskazywał brakujących plików)
+    const stillUsed = new Set(next.fragments.flatMap((f) => f.files.map((x) => x.path)));
+    for (const path of purgeList()) {
       try {
-        const meta = await gh(`${profile}/${file.path}`);
-        if (meta?.sha) await gh(`${profile}/${file.path}`, { method: 'DELETE', body: { message: commitMsg(`usunięto ${file.name}`), sha: meta.sha } });
-      } catch { /* nie blokuje synchronizacji */ }
+        if (!stillUsed.has(path)) {
+          const meta = await gh(`${profile}/${path}`);
+          if (meta?.sha) await gh(`${profile}/${path}`, { method: 'DELETE', body: { message: commitMsg(`usunięto ${path.split('/').pop()}`), sha: meta.sha } });
+        }
+        savePurge(purgeList().filter((x) => x !== path));
+      } catch { /* spróbuje przy następnej synchronizacji */ }
     }
 
     ls.set(K.last, String(Date.now()));
