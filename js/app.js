@@ -1,12 +1,12 @@
-import * as db from './db.js?v=202611011059';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011059';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011059';
-import * as whisper from './whisper.js?v=202611011059';
-import * as sync from './sync.js?v=202611011059';
-import * as pics from './photos.js?v=202611011059';
-import * as share from './share.js?v=202611011059';
+import * as db from './db.js?v=202611011104';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011104';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011104';
+import * as whisper from './whisper.js?v=202611011104';
+import * as sync from './sync.js?v=202611011104';
+import * as pics from './photos.js?v=202611011104';
+import * as share from './share.js?v=202611011104';
 
-const APP_VERSION = '202611011059'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011104'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
