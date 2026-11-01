@@ -19,12 +19,14 @@ Prosta aplikacja webowa (PWA) do nagrywania fragmentów raportu z podróży. Ka�
   automatyczne w trakcie nagrania (błąd `network` → Whisper; rozpoznawanie wraca → Whisper się wyłącza).
   Opcja „zawsze Whisper” w Ustawieniach. Model (base ≈80 MB / small ≈250 MB, q8) pobiera się raz w Ustawieniach
   (Cache Storage `transformers-cache`),
-- automatycznie zapisuje lokalizację (Geolocation API) i — jeśli jest internet — nazwę miejsca (Nominatim/OSM)
+- automatycznie zapisuje lokalizację (Geolocation API; pierwsza pozycja od razu, potem przez ≤ 30 s `watchPosition`
+  podmienia ją na dokładniejszą, aż do ±25 m — `refineLocation()` w `js/context.js`) i — jeśli jest internet — nazwę miejsca (Nominatim/OSM)
   oraz warunki pogodowe (Open-Meteo, bez klucza API). Brakujące dane uzupełniają się później, gdy wróci internet
   (pogoda historyczna z danych godzinowych Open-Meteo: do ~3 miesięcy wstecz z API prognoz, starsze z archiwum ERA5),
 - pozwala dodać zdjęcia, dokumenty i notatkę tekstową; transkrypcję można poprawiać ręcznie.
 
-Bliskie wpisy (następny zaczął się ≤ 10 min po końcu poprzedniego, ten sam dzień, ≤ 200 m albo brak lokalizacji)
+Bliskie wpisy (następny zaczął się ≤ 10 min po końcu poprzedniego, ten sam dzień, to samo miejsce albo brak lokalizacji;
+to samo miejsce = `samePlace()`: ≤ 200 m albo w granicach sumy dokładności obu pozycji)
 są grupowane pod jednym nagłówkiem na liście i w `dziennik.md` (`groupFragments()` w `js/context.js`). Dane się nie zmieniają.
 Szczegóły wpisu otwierają się do czytania (bez pól, bez usuwania); „✎ Edytuj” włącza edycję, „✓ Gotowe” ją kończy.
 Nowy wpis bez nagrania otwiera się od razu w edycji.

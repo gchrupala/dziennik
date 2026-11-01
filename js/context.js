@@ -1,5 +1,5 @@
 // Kontekst wpisu: lokalizacja (GPS), nazwa miejsca (Nominatim/OSM) i pogoda (Open-Meteo).
-import { getFragment, getAllFragments, patchFragment, notify } from './db.js?v=202611011537';
+import { getFragment, getAllFragments, patchFragment, notify } from './db.js?v=202611011542';
 
 const busy = new Set();
 export const isBusy = (id) => busy.has(id);
@@ -190,7 +190,40 @@ export function captureContext(id) {
     }
     await patchFragment(id, { location: loc });
     await enrich(id);
+    refineLocation(id, loc);
   });
+}
+
+// Pierwsza pozycja bywa zgrubna (z sieci, ±100 m) albo zapamiętana sprzed chwili. Przez kolejne do 30 s
+// (zwykle w trakcie nagrania) czekamy na dokładniejszą z GPS i ją podmieniamy; przy przesunięciu > 100 m
+// odświeżamy też nazwę miejsca.
+const REFINE_MS = 30000;
+const GOOD_ACCURACY = 25;
+function refineLocation(id, first) {
+  if (!navigator.geolocation?.watchPosition || (first.accuracy <= GOOD_ACCURACY && Date.now() - first.at < 10000)) return;
+  let best = first;
+  let watch = null;
+  let timer = null;
+  const stop = async () => {
+    if (watch == null) return;
+    navigator.geolocation.clearWatch(watch);
+    watch = null;
+    clearTimeout(timer);
+    if (best !== first && distanceM(first, best) > 100 && navigator.onLine) {
+      try {
+        const p = await reverseGeocode(best.lat, best.lon);
+        await patchFragment(id, (cur) => ({ location: { ...cur.location, ...p } }));
+      } catch { /* zostaje poprzednia nazwa */ }
+    }
+  };
+  watch = navigator.geolocation.watchPosition(async (p) => {
+    const c = p.coords;
+    if (p.timestamp < first.at || c.accuracy >= best.accuracy * 0.8) return; // starsza albo nie lepsza
+    best = { lat: c.latitude, lon: c.longitude, accuracy: Math.round(c.accuracy), altitude: c.altitude != null ? Math.round(c.altitude) : null, at: p.timestamp };
+    await patchFragment(id, (cur) => ({ location: { ...cur.location, ...best } }));
+    if (best.accuracy <= GOOD_ACCURACY) stop();
+  }, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: REFINE_MS });
+  timer = setTimeout(stop, REFINE_MS);
 }
 
 // Uzupełnia brakujące miejsce/pogodę w starszych wpisach (np. nagranych bez internetu).
@@ -213,7 +246,12 @@ export async function backfillContext() {
 
 // ---------- grupowanie bliskich wpisów (tylko widok i raport; dane się nie zmieniają) ----------
 export const GROUP_GAP_MS = 10 * 60 * 1000; // przerwa między końcem jednego a początkiem następnego
-export const GROUP_DIST_M = 200;            // dokładność GPS w telefonie to zwykle 20–40 m
+export const GROUP_DIST_M = 200;            // dokładność GPS w telefonie to zwykle 20–40 m (pozycja z sieci: ±100 m i więcej)
+
+/** To samo miejsce: ≤ 200 m albo w granicach łącznej niepewności obu pozycji (gdy ta jest większa). */
+export function samePlace(a, b) {
+  return distanceM(a, b) <= Math.max(GROUP_DIST_M, (a.accuracy || 0) + (b.accuracy || 0));
+}
 
 export function distanceM(a, b) {
   const rad = (d) => (d * Math.PI) / 180;
@@ -233,7 +271,7 @@ function follows(prev, next) {
   const a = prev.location;
   const b = next.location;
   if (a?.lat == null || b?.lat == null) return true;
-  return distanceM(a, b) <= GROUP_DIST_M;
+  return samePlace(a, b);
 }
 
 /** Wpisy (dowolna kolejność) → grupy kolejnych bliskich wpisów, chronologicznie (także wewnątrz grup). */

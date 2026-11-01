@@ -1,13 +1,13 @@
-import * as db from './db.js?v=202611011537';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011537';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011537';
-import * as whisper from './whisper.js?v=202611011537';
-import * as sync from './sync.js?v=202611011537';
-import * as pics from './photos.js?v=202611011537';
-import * as share from './share.js?v=202611011537';
-import { mapHtml, routeMapHtml, renderMaps } from './map.js?v=202611011537';
+import * as db from './db.js?v=202611011542';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011542';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, samePlace } from './context.js?v=202611011542';
+import * as whisper from './whisper.js?v=202611011542';
+import * as sync from './sync.js?v=202611011542';
+import * as pics from './photos.js?v=202611011542';
+import * as share from './share.js?v=202611011542';
+import { mapHtml, routeMapHtml, renderMaps } from './map.js?v=202611011542';
 
-const APP_VERSION = '202611011537'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011542'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -822,8 +822,8 @@ async function renderSequence(r) {
   const order = [];
   for (const g of shown) {
     const loc = g.find((f) => f.location?.lat != null)?.location;
-    if (!loc || (order.length && distanceM(route[order.at(-1)], loc) <= GROUP_DIST_M)) continue;
-    let i = route.findIndex((p) => distanceM(p, loc) <= GROUP_DIST_M);
+    if (!loc || (order.length && samePlace(route[order.at(-1)], loc))) continue;
+    let i = route.findIndex((p) => samePlace(p, loc));
     if (i < 0) i = route.push(loc) - 1;
     order.push(i);
     places.set(g, i + 1);
