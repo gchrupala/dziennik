@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611010335';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js?v=202611010335';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010335';
-import * as whisper from './whisper.js?v=202611010335';
-import * as sync from './sync.js?v=202611010335';
+import * as db from './db.js?v=202611010340';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js?v=202611010340';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611010340';
+import * as whisper from './whisper.js?v=202611010340';
+import * as sync from './sync.js?v=202611010340';
 
-const APP_VERSION = '202611010335'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611010340'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -708,16 +708,13 @@ async function openSettings() {
   html += speechSupported
     ? '<p>Z internetem tekst pojawia się na żywo (rozpoznawanie mowy przeglądarki). Gdy połączenie zniknie w trakcie nagrania, aplikacja sama przełącza się na model offline.</p>'
     : '<p class="muted">Ta przeglądarka nie ma rozpoznawania mowy na żywo — używany jest tylko model offline.</p>';
-  if (speechSupported && offlineSpeech.supported) {
-    html += `<p class="muted">Chrome oferuje też własne rozpoznawanie na urządzeniu (opcjonalnie):</p><ul class="offline-list">${LANGS.map((l) =>
-      `<li data-lang="${l.code}"><span>${esc(l.name)}</span><span class="status muted">sprawdzam…</span></li>`).join('')}</ul>`;
-  }
+  html += '<div id="chrome-offline"></div>';
   html += `<h3>Kopia w GitHub</h3><div id="sync-settings">${syncSettingsHtml()}</div>`;
   html += '<h3>Dane</h3><p id="storage-info" class="muted">…</p>';
   $('#settings-body').innerHTML = html;
   if (!$('#settings').open) $('#settings').showModal();
   renderWhisperSettings();
-  if (speechSupported && offlineSpeech.supported) LANGS.forEach((l) => updateOfflineRow(l.code));
+  renderChromeOffline();
 
   const count = (await db.getAllFragments()).length;
   const est = await navigator.storage?.estimate?.().catch(() => null);
@@ -732,6 +729,17 @@ async function openSettings() {
 }
 
 $('#settings-btn').addEventListener('click', openSettings);
+
+// Rozpoznawanie na urządzeniu wbudowane w Chrome — pokazuj tylko, gdy jest choć jeden język do użycia/pobrania.
+async function renderChromeOffline() {
+  const box = $('#chrome-offline');
+  if (!box || !speechSupported || !offlineSpeech.supported) return;
+  const statuses = await Promise.all(LANGS.map((l) => offlineSpeech.status(l.code)));
+  if (statuses.every((st) => st === 'unavailable')) return;
+  box.innerHTML = `<p class="muted">Chrome oferuje też własne rozpoznawanie na urządzeniu (opcjonalnie):</p><ul class="offline-list">${LANGS.map((l) =>
+    `<li data-lang="${l.code}"><span>${esc(l.name)}</span><span class="status muted">sprawdzam…</span></li>`).join('')}</ul>`;
+  LANGS.forEach((l) => updateOfflineRow(l.code));
+}
 
 // ---------- kopia w GitHub ----------
 function syncStatusText() {
