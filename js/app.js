@@ -1,6 +1,7 @@
 import * as db from './db.js';
 import { RecordingSession, LANGS, speechSupported, offlineSpeech } from './recorder.js';
 import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js';
+import * as whisper from './whisper.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -68,16 +69,23 @@ function setRecordingUI(on) {
 }
 
 function renderHint() {
-  $('#rec-hint').textContent = speechSupported
+  const hint = $('#rec-hint');
+  hint.innerHTML = speechSupported || whisper.ready()
     ? 'Naciśnij, aby nagrać fragment. Dźwięk, transkrypcja, lokalizacja i pogoda zapiszą się same.'
-    : 'Ta przeglądarka nie obsługuje transkrypcji — nagra się sam dźwięk (użyj Chrome lub Safari).';
+    : 'Ta przeglądarka nie obsługuje transkrypcji na żywo — pobierz model offline w Ustawieniach.';
+  if (whisper.supported && !whisper.ready()) {
+    hint.innerHTML += '<br><button type="button" class="link-btn warn" data-open-settings>⚠ Transkrypcja bez internetu wymaga jednorazowego pobrania modelu — Ustawienia</button>';
+  }
 }
 
-function renderLive({ text, interim }) {
+$('#rec-hint').addEventListener('click', (e) => { if (e.target.closest('[data-open-settings]')) openSettings(); });
+
+function renderLive({ text, interim, pending }) {
   const el = $('#live');
   el.innerHTML = text || interim
     ? `${esc(text)} <span class="interim">${esc(interim)}</span>`
     : '<span class="interim">Mów…</span>';
+  if (pending) el.innerHTML += ` <span class="interim">⏳ (przetwarzam ${pending})</span>`;
   el.scrollTop = el.scrollHeight;
 }
 
@@ -183,7 +191,11 @@ async function stopRecording() {
     const r = await session.stop();
     clearTimeout(rec.saveTimer);
     await saveAudio(id, audioId, r.blob, r.mimeType, createdAt);
-    await db.patchFragment(id, { status: 'done', durationMs: Math.round(r.durationMs), transcript: r.transcript, langs: r.langs });
+    await db.patchFragment(id, {
+      status: 'done', durationMs: Math.round(r.durationMs), transcript: r.transcript, langs: r.langs, transcribing: r.pending > 0,
+    });
+    // Whisper kończy ostatnie fragmenty w tle — zapisz pełny tekst, gdy skończy.
+    if (r.pending > 0) r.done.then((transcript) => db.patchFragment(id, { transcript, transcribing: false }));
   } catch (err) {
     toast(`Błąd zapisu nagrania: ${err.message}`);
   }
@@ -305,7 +317,46 @@ const contextHtml = (f) => [locationHtml(f), weatherHtml(f)].filter(Boolean).map
 async function refreshContext(id) {
   const f = await db.getFragment(id);
   const el = $('#context');
-  if (f && el && currentId === id) el.innerHTML = contextHtml(f);
+  if (f && el && currentId === id) {
+    el.innerHTML = contextHtml(f);
+    refreshTranscript(f);
+  }
+}
+
+// Gdy Whisper pracuje w tle, pole transkrypcji jest tylko do odczytu i aktualizuje się samo.
+function refreshTranscript(f) {
+  const ta = $('#transcript');
+  if (!ta || currentId !== f.id) return;
+  const busy = Boolean(f.transcribing);
+  if (busy || ta.readOnly) {
+    ta.value = f.transcript;
+    autosize(ta);
+  }
+  ta.readOnly = busy;
+  $('#transcribing').hidden = !busy;
+  const btn = $('#whisper-btn');
+  if (btn) btn.hidden = busy;
+}
+
+// Transkrypcja całego zapisanego nagrania Whisperem (np. nagranie bez internetu, przerwane, zły język).
+const transcribingNow = new Set();
+async function transcribeFragment(id) {
+  if (transcribingNow.has(id) || !whisper.ready()) return;
+  transcribingNow.add(id);
+  try {
+    const f = await db.getFragment(id);
+    const file = f?.audioId && await db.getFile(f.audioId);
+    if (!file) return;
+    await db.patchFragment(id, { transcribing: true });
+    const audio = await whisper.decodeBlob(file.blob);
+    const text = await whisper.transcribeLong(audio, f.langs?.[0] || lang);
+    await db.patchFragment(id, { transcript: text, transcribing: false });
+  } catch (err) {
+    await db.patchFragment(id, { transcribing: false });
+    toast(`Transkrypcja offline nie powiodła się: ${err.message}`);
+  } finally {
+    transcribingNow.delete(id);
+  }
 }
 
 function autosize(ta) {
@@ -337,6 +388,8 @@ async function renderDetail(id) {
     ${f.kind === 'audio' ? `<section class="block">
       <h3>Transkrypcja ${langs ? `<span class="muted">(${esc(langs)})</span>` : ''}</h3>
       <textarea id="transcript" rows="4" placeholder="Brak transkrypcji — możesz ją wpisać ręcznie.">${esc(f.transcript)}</textarea>
+      <p class="transcribing muted" id="transcribing" hidden>⏳ Transkrypcja offline (Whisper) w toku…</p>
+      ${f.audioId && whisper.ready() ? '<button type="button" class="link-btn" id="whisper-btn">🎧 Transkrybuj nagranie offline (Whisper)</button>' : ''}
     </section>` : ''}
     <section class="block">
       <h3>Notatki</h3>
@@ -369,8 +422,15 @@ async function renderDetail(id) {
   $('#add-photo', view).addEventListener('change', (e) => addFiles(id, e.target, 'photo'));
   $('#add-doc', view).addEventListener('change', (e) => addFiles(id, e.target, 'document'));
 
+  $('#whisper-btn', view)?.addEventListener('click', async () => {
+    const cur = await db.getFragment(id);
+    if (cur?.transcript.trim() && !confirm('Zastąpić obecną transkrypcję wynikiem z Whispera?')) return;
+    transcribeFragment(id);
+  });
+
   if (f.audioId) renderAudio(f);
   renderAttachments(f);
+  refreshTranscript(f);
   if (focusNotes) {
     focusNotes = false;
     $('#notes', view).focus();
@@ -577,20 +637,81 @@ async function updateOfflineRow(code) {
   }
 }
 
-$('#settings-btn').addEventListener('click', async () => {
-  let html = '<h3>Transkrypcja</h3>';
-  if (!speechSupported) {
-    html += '<p>Ta przeglądarka nie obsługuje rozpoznawania mowy — nagrywany jest sam dźwięk. Użyj Chrome (Android) lub Safari (iPhone).</p>';
-  } else {
-    html += '<p>Transkrypcja działa na żywo w trakcie nagrania. Język możesz zmienić także w trakcie. Zwykle wymaga internetu.</p>';
-    html += offlineSpeech.supported
-      ? `<p>Rozpoznawanie offline (na urządzeniu):</p><ul class="offline-list">${LANGS.map((l) =>
-        `<li data-lang="${l.code}"><span>${esc(l.name)}</span><span class="status muted">sprawdzam…</span></li>`).join('')}</ul>`
-      : '<p class="muted">Ta przeglądarka nie oferuje rozpoznawania mowy offline — bez internetu zapisze się sam dźwięk.</p>';
+// Whisper: pobieranie modelu, wybór, usuwanie.
+let installing = null;
+async function renderWhisperSettings() {
+  const box = $('#whisper-settings');
+  if (!box) return;
+  if (!whisper.supported) {
+    box.innerHTML = '<p class="muted">Ta przeglądarka nie obsługuje transkrypcji offline.</p>';
+    return;
+  }
+  const rows = await Promise.all(whisper.MODELS.map(async (m) => {
+    const cached = await whisper.isCached(m.id);
+    const active = whisper.installedModel() === m.id;
+    let action;
+    if (installing?.model === m.id) action = `<span class="muted" id="whisper-progress">pobieranie… ${Math.round(installing.progress * 100)}%</span>`;
+    else if (active) action = '<span>✓ używany</span> <button type="button" class="btn small" data-whisper-remove="' + m.id + '">Usuń</button>';
+    else if (cached) action = `<button type="button" class="btn small" data-whisper-install="${m.id}">Używaj</button>`;
+    else action = `<button type="button" class="btn small" data-whisper-install="${m.id}" ${installing ? 'disabled' : ''}>Pobierz</button>`;
+    return `<li><span><strong>${esc(m.name)}</strong> <span class="muted">${esc(m.size)}</span><br><small class="muted">${esc(m.note)}</small></span><span>${action}</span></li>`;
+  }));
+  box.innerHTML = `
+    <p>${whisper.ready()
+      ? '✓ Transkrypcja bez internetu jest gotowa.'
+      : '<strong>Pobierz model (raz, przy internecie, najlepiej przez Wi-Fi)</strong>, żeby transkrypcja działała bez sieci.'}</p>
+    <ul class="offline-list">${rows.join('')}</ul>
+    <label class="check"><input type="checkbox" id="whisper-always" ${whisper.mode() === 'always' ? 'checked' : ''} ${whisper.ready() ? '' : 'disabled'}>
+      Zawsze używaj modelu offline (także z internetem — prywatnie, ale tekst pojawia się z opóźnieniem)</label>`;
+}
+
+$('#settings-body').addEventListener('click', async (e) => {
+  const inst = e.target.closest('[data-whisper-install]');
+  const rem = e.target.closest('[data-whisper-remove]');
+  if (inst && !installing) {
+    const model = inst.dataset.whisperInstall;
+    if (!navigator.onLine && !(await whisper.isCached(model))) return toast('Do pobrania modelu potrzebny jest internet.');
+    installing = { model, progress: 0 };
+    renderWhisperSettings();
+    try {
+      await whisper.install(model, (p) => {
+        installing.progress = p;
+        const el = $('#whisper-progress');
+        if (el) el.textContent = `pobieranie… ${Math.round(p * 100)}%`;
+      });
+      toast('Model pobrany — transkrypcja działa teraz bez internetu.');
+    } catch (err) {
+      toast(`Nie udało się pobrać modelu: ${err.message}`);
+    }
+    installing = null;
+    renderWhisperSettings();
+    renderHint();
+  } else if (rem) {
+    if (!confirm('Usunąć model? Transkrypcja bez internetu przestanie działać.')) return;
+    await whisper.remove(rem.dataset.whisperRemove);
+    renderWhisperSettings();
+    renderHint();
+  }
+});
+
+$('#settings-body').addEventListener('change', (e) => {
+  if (e.target.id === 'whisper-always') whisper.setMode(e.target.checked ? 'always' : 'auto');
+});
+
+async function openSettings() {
+  let html = '<h3>Transkrypcja bez internetu</h3><div id="whisper-settings"><p class="muted">…</p></div>';
+  html += '<h3>Transkrypcja z internetem</h3>';
+  html += speechSupported
+    ? '<p>Z internetem tekst pojawia się na żywo (rozpoznawanie mowy przeglądarki). Gdy połączenie zniknie w trakcie nagrania, aplikacja sama przełącza się na model offline.</p>'
+    : '<p class="muted">Ta przeglądarka nie ma rozpoznawania mowy na żywo — używany jest tylko model offline.</p>';
+  if (speechSupported && offlineSpeech.supported) {
+    html += `<p class="muted">Chrome oferuje też własne rozpoznawanie na urządzeniu (opcjonalnie):</p><ul class="offline-list">${LANGS.map((l) =>
+      `<li data-lang="${l.code}"><span>${esc(l.name)}</span><span class="status muted">sprawdzam…</span></li>`).join('')}</ul>`;
   }
   html += '<h3>Dane</h3><p id="storage-info" class="muted">…</p>';
   $('#settings-body').innerHTML = html;
-  $('#settings').showModal();
+  if (!$('#settings').open) $('#settings').showModal();
+  renderWhisperSettings();
   if (speechSupported && offlineSpeech.supported) LANGS.forEach((l) => updateOfflineRow(l.code));
 
   const count = (await db.getAllFragments()).length;
@@ -598,11 +719,13 @@ $('#settings-btn').addEventListener('click', async () => {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   $('#storage-info').textContent = [
     `Wpisów: ${count}.`,
-    est ? `Zajęte miejsce: ${fmtSize(est.usage || 0)}.` : '',
+    est ? `Zajęte miejsce (z modelem): ${fmtSize(est.usage || 0)}.` : '',
     'Wszystko jest zapisane tylko na tym urządzeniu.',
     persisted ? 'Przeglądarka nie usunie danych automatycznie.' : 'Zainstaluj aplikację na ekranie głównym, żeby przeglądarka nie usunęła danych przy braku miejsca.',
   ].filter(Boolean).join(' ');
-});
+}
+
+$('#settings-btn').addEventListener('click', openSettings);
 
 // ---------- start ----------
 async function init() {
@@ -610,9 +733,16 @@ async function init() {
   renderHint();
   if (!window.isSecureContext) toast('Mikrofon i lokalizacja działają tylko przez HTTPS (lub na localhost).', 10000);
   // Nagrania przerwane (np. zamknięta karta) — audio zapisane do ostatnich 10 s zostaje.
+  // Transkrypcja Whispera przerwana zamknięciem aplikacji — powtórz dla całego nagrania.
+  const redo = [];
   for (const f of await db.getAllFragments()) {
     if (f.status === 'recording') await db.patchFragment(f.id, { status: 'interrupted' });
+    if (f.transcribing) {
+      await db.patchFragment(f.id, { transcribing: false });
+      if (f.audioId) redo.push(f.id);
+    }
   }
+  redo.forEach((id) => transcribeFragment(id));
   await render();
   backfillContext();
   window.addEventListener('online', () => backfillContext());

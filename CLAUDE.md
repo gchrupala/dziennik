@@ -11,8 +11,14 @@
 
 Prosta aplikacja webowa (PWA) do nagrywania fragmentów raportu z podróży. Każdy fragment:
 
-- nagrywa dźwięk (MediaRecorder) i **jednocześnie** robi transkrypcję na żywo (Web Speech API)
-  w jednym z języków: polski (`pl-PL`), hiszpański (`es-ES`), angielski (`en-US`); język można zmienić w trakcie nagrania,
+- nagrywa dźwięk (MediaRecorder) i **jednocześnie** robi transkrypcję w jednym z języków: polski (`pl-PL`),
+  hiszpański (`es-ES`), angielski (`en-US`); język można zmienić w trakcie nagrania,
+- **transkrypcja musi działać bez internetu (wymaganie kluczowe).** Z internetem: Web Speech API (na żywo).
+  Bez internetu: Whisper w przeglądarce (transformers.js, Web Worker, WASM) — dźwięk 16 kHz z AudioWorklet
+  jest cięty na fragmenty 18–28 s w miejscach ciszy, tekst pojawia się z opóźnieniem. Przełączanie jest
+  automatyczne w trakcie nagrania (błąd `network` → Whisper; rozpoznawanie wraca → Whisper się wyłącza).
+  Opcja „zawsze Whisper” w Ustawieniach. Model (base ≈80 MB / small ≈250 MB, q8) pobiera się raz w Ustawieniach
+  (Cache Storage `transformers-cache`),
 - automatycznie zapisuje lokalizację (Geolocation API) i — jeśli jest internet — nazwę miejsca (Nominatim/OSM)
   oraz warunki pogodowe (Open-Meteo, bez klucza API). Brakujące dane uzupełniają się później, gdy wróci internet
   (pogoda historyczna z danych godzinowych Open-Meteo, do ~3 miesięcy wstecz),
@@ -28,21 +34,26 @@ index.html            szkielet UI
 css/style.css         style (mobile-first, jasny/ciemny motyw)
 js/app.js             widoki (lista, szczegóły, nagrywanie, ustawienia), routing przez hash (#/ i #/f/<id>)
 js/recorder.js        RecordingSession: MediaRecorder + SpeechRecognition (auto-restart, offline, zmiana języka)
+js/whisper.js         Whisper: pobieranie/wybór modelu, kolejka transkrypcji, dekodowanie i cięcie nagrań
+js/whisper-worker.js  worker z transformers.js (import z jsDelivr, wersja przypięta)
+js/pcm-worklet.js     AudioWorklet zbierający próbki 16 kHz dla Whispera
 js/context.js         lokalizacja, odwrotne geokodowanie, pogoda, uzupełnianie braków
 js/db.js              IndexedDB: store `fragments` (metadane) i `files` (bloby: audio, zdjęcia, dokumenty)
-sw.js                 service worker (stale-while-revalidate, działa offline)
+sw.js                 service worker: offline, cache jsDelivr (cache-first), nagłówki COOP/COEP (wątki WASM)
 manifest.webmanifest  manifest PWA
 icons/                ikony (icon.svg jest źródłem; PNG generowane z niego)
 ```
 
 Model fragmentu (`fragments`): `id, createdAt, updatedAt, status ('recording'|'done'|'interrupted'),
-kind ('audio'|'text'), langs[], transcript, notes, audioId, durationMs, location, weather, attachments[]`.
+kind ('audio'|'text'), langs[], transcript, transcribing, notes, audioId, durationMs, location, weather, attachments[]`.
+`transcribing: true` = Whisper kończy w tle (pole tylko do odczytu); po restarcie aplikacji nagranie jest transkrybowane od nowa.
 `attachments` trzyma tylko metadane (`id, kind ('photo'|'document'), name, type, size`); bloby są w `files`.
 Audio jest zapisywane co 10 s w trakcie nagrania, więc przerwane nagranie nie przepada (status `interrupted`).
 
 ## Konwencje
 
-- Czysty JavaScript (moduły ES), **bez kroku budowania i bez zależności npm**.
+- Czysty JavaScript (moduły ES), **bez kroku budowania i bez zależności npm**. Jedyny zewnętrzny kod: transformers.js z jsDelivr
+  (przypięta wersja w `js/whisper-worker.js`; ONNX Runtime WASM i model są cache'owane przez samą bibliotekę).
 - Interfejs po polsku.
 - Zmiana schematu IndexedDB → podbij `VERSION` w `js/db.js` i dopisz migrację w `onupgradeneeded`.
 - Nowy plik statyczny → dopisz go do `SHELL` w `sw.js`. Przy większych zmianach podbij `CACHE` w `sw.js`.
@@ -62,13 +73,17 @@ Hosting: GitHub Pages z gałęzi `main`, katalog główny (plik `.nojekyll` wył
 
 Brak testów automatycznych w repo. Do sprawdzenia w przeglądarce headless służy Playwright
 (Chromium z `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream`, zamockowane
-`SpeechRecognition`, geolokalizacja i odpowiedzi Open-Meteo/Nominatim).
+`SpeechRecognition`, geolokalizacja i odpowiedzi Open-Meteo/Nominatim). Whisper: mowa z `espeak-ng -v pl`
+podana przez `--use-file-for-fake-audio-capture=plik.wav`, `context.setOffline(true)` po pobraniu modelu.
+Prawdziwe `SpeechRecognition` w headless Chromium wywraca kartę — zawsze je mockuj.
 
 ## Znane ograniczenia
 
 - Transkrypcja na żywo działa w Chrome (Android/desktop) i Safari (iOS/macOS); Firefox nagrywa sam dźwięk.
-- Chrome zwykle wysyła dźwięk do rozpoznawania na serwery Google, więc bez internetu transkrypcja staje
-  (dźwięk nagrywa się dalej). Nowsze Chrome mają rozpoznawanie na urządzeniu — modele pobiera się w Ustawieniach.
+- Web Speech w Chrome wysyła dźwięk do Google — bez internetu działa tylko Whisper (o ile model jest pobrany).
+- Whisper nie jest strumieniowy: tekst offline pojawia się co ~20–30 s; na wolnym telefonie (model small)
+  może nie nadążać — kolejka kończy się po zatrzymaniu nagrania. Dodatkowo przycisk „Transkrybuj nagranie offline”.
+- Whisper „halucynuje” na ciszy — ciche fragmenty są pomijane; `max_new_tokens` ogranicza zapętlenia.
 - Na Androidzie rozpoznawanie mowy i nagrywanie korzystają z mikrofonu równocześnie; aplikacja przekazuje
   ścieżkę audio do `SpeechRecognition.start(track)` tam, gdzie przeglądarka to obsługuje. Trzeba testować na telefonie.
 - Dane są tylko na urządzeniu — brak eksportu/kopii zapasowej (kandydat na kolejny krok).
