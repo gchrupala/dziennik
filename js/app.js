@@ -1,12 +1,13 @@
-import * as db from './db.js?v=202611011104';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011104';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments } from './context.js?v=202611011104';
-import * as whisper from './whisper.js?v=202611011104';
-import * as sync from './sync.js?v=202611011104';
-import * as pics from './photos.js?v=202611011104';
-import * as share from './share.js?v=202611011104';
+import * as db from './db.js?v=202611011106';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011106';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011106';
+import * as whisper from './whisper.js?v=202611011106';
+import * as sync from './sync.js?v=202611011106';
+import * as pics from './photos.js?v=202611011106';
+import * as share from './share.js?v=202611011106';
+import { mapHtml, renderMaps } from './map.js?v=202611011106';
 
-const APP_VERSION = '202611011104'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011106'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -389,13 +390,20 @@ function weatherHtml(f) {
   return `${d.icon} <strong>${Math.round(w.temperature)}°C</strong>, ${esc(d.text.toLowerCase())}<br><span class="muted">${esc(details.join(' · '))}</span>`;
 }
 
-const contextHtml = (f) => [locationHtml(f), weatherHtml(f)].filter(Boolean).map((h) => `<p>${h}</p>`).join('');
+const para = (h) => (h ? `<p>${h}</p>` : '');
+const contextHtml = (f) => para(locationHtml(f)) + mapHtml(f.location) + para(weatherHtml(f));
 
 async function refreshContext(id) {
   const f = await db.getFragment(id);
   const el = $('#context');
   if (f && el && currentId === id) {
-    el.innerHTML = contextHtml(f);
+    // Tylko przy zmianie (np. doszła pogoda) — inaczej mapka migałaby przy każdym zapisie.
+    const html = contextHtml(f);
+    if (el.dataset.html !== html) {
+      el.innerHTML = html;
+      el.dataset.html = html;
+      renderMaps(el);
+    }
     refreshTranscript(f);
     const ph = $('#photos');
     if (ph && ph.dataset.key !== attachmentsKey(f)) renderAttachments(f);
@@ -537,6 +545,8 @@ async function renderDetail(id) {
     transcribeFragment(id);
   });
 
+  $('#context').dataset.html = contextHtml(f);
+  renderMaps($('#context'));
   if (f.audioId) renderAudio(f);
   renderAttachments(f);
   refreshTranscript(f);
@@ -587,6 +597,8 @@ function renderReading(f) {
     const cur = await db.getFragment(id);
     if (cur) shareGroups([[cur]]);
   });
+  $('#context').dataset.html = contextHtml(f);
+  renderMaps($('#context'));
   if (f.audioId) renderAudio(f);
   renderAttachments(f);
   refreshTranscript(f);
@@ -601,6 +613,8 @@ const shareGroups = (groups) => share.shareGroups(groups, toast);
 let scrollTarget = null; // wpis, do którego przewinąć widok grupy/dnia
 let seqObserver = null;
 let seqIds = new Set(); // wpisy pokazane w widoku grupy/dnia (odświeżanie transkrypcji)
+
+const groupMapHtml = (group) => mapHtml(group.find((f) => f.location?.lat != null)?.location);
 
 function groupHeadHtml(group) {
   const first = group[0];
@@ -652,6 +666,14 @@ async function renderSequence(r) {
     return;
   }
   seqIds = new Set(shown.flat().map((f) => f.id));
+  // W widoku dnia mapka tylko przy zmianie miejsca (dalej niż 200 m od ostatniej pokazanej).
+  let lastMap = null;
+  const dayMap = (g) => {
+    const loc = g.find((f) => f.location?.lat != null)?.location;
+    if (!loc || (lastMap && distanceM(lastMap, loc) <= GROUP_DIST_M)) return '';
+    lastMap = loc;
+    return mapHtml(loc);
+  };
   const ids = [...seqIds];
   const count = shown.flat().length;
   view.innerHTML = `
@@ -659,8 +681,9 @@ async function renderSequence(r) {
       <div class="detail-date">${esc(title)}</div>
       <div class="detail-time">${r.view === 'group' ? groupHeadHtml(shown[0]) : esc(entriesLabel(count))}</div>
     </div>${shareBtn()}</div>
+    ${r.view === 'group' ? groupMapHtml(shown[0]) : ''}
     ${shown.map((g) => `<section class="seq-group">
-      ${r.view === 'day' ? `<h3 class="seq-group-head">${groupHeadHtml(g)}</h3>` : ''}
+      ${r.view === 'day' ? `<h3 class="seq-group-head">${groupHeadHtml(g)}</h3>${dayMap(g)}` : ''}
       ${g.map(entryHtml).join('')}
     </section>`).join('')}`;
   seqObserver = new IntersectionObserver((items) => {
@@ -671,6 +694,7 @@ async function renderSequence(r) {
     }
   }, { rootMargin: '600px 0px' });
   view.querySelectorAll('[data-lazy]').forEach((el) => seqObserver.observe(el));
+  renderMaps(view);
   $('#share', view).addEventListener('click', async () => {
     // Aktualne dane (np. transkrypcja dokończona w tle), z zachowaniem podziału na grupy.
     const fresh = new Map((await Promise.all(ids.map((i) => db.getFragment(i)))).filter(Boolean).map((f) => [f.id, f]));

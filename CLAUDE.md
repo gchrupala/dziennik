@@ -30,7 +30,10 @@ Szczegóły wpisu otwierają się do czytania (bez pól, bez usuwania); „✎ E
 Nowy wpis bez nagrania otwiera się od razu w edycji.
 Grupa i dzień to widoki do czytania: wszystkie wpisy po kolei z nagraniami, tekstem, zdjęciami i dokumentami
 (pliki wczytywane przy przewinięciu, IntersectionObserver). Karta w grupie i nagłówek grupy prowadzą do widoku grupy,
-nagłówek dnia na liście do widoku dnia. Ikona udostępniania (widoki do czytania): Web Share z tekstem (data, godziny, miejsce, pogoda, transkrypcje, notatki)
+nagłówek dnia na liście do widoku dnia.
+Mapka okolicy (OSM, zoom 15, znacznik + kółko dokładności GPS) jest w ramce z miejscem i pogodą wpisu, pod nagłówkiem
+grupy i w widoku dnia przy zmianie miejsca (> 200 m). Kafelki z tile.openstreetmap.org omijają service worker (cache HTTP);
+bez internetu i bez cache mapka się chowa. Dotknięcie otwiera openstreetmap.org. Ikona udostępniania (widoki do czytania): Web Share z tekstem (data, godziny, miejsce, pogoda, transkrypcje, notatki)
 i zdjęciami (JPEG); tekst idzie też do schowka (Signal przy zdjęciach pomija tekst, WhatsApp nie). Bez Web Share — schowek. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
 
 Można też utworzyć wpis bez nagrania (sama notatka/zdjęcia + lokalizacja i pogoda).
@@ -59,6 +62,7 @@ js/recorder.js        RecordingSession: MediaRecorder + SpeechRecognition (auto-
 js/whisper.js         Whisper: pobieranie/wybór modelu, kolejka transkrypcji, dekodowanie i cięcie nagrań
 js/whisper-worker.js  worker z transformers.js (import z jsDelivr, wersja przypięta)
 js/pcm-worklet.js     AudioWorklet zbierający próbki 16 kHz dla Whispera
+js/map.js             mapka okolicy (kafelki OpenStreetMap, bez biblioteki): `mapHtml(loc)` + `renderMaps(root)`
 js/share.js           udostępnianie: tekst + zdjęcia (Web Share), tekst także do schowka
 js/photos.js          podglądy JPEG zdjęć HEIC/HEIF (oryginał zostaje), `ensurePreviews()`, `displayFile()`
 js/heic-worker.js     worker: dekodowanie HEIC (heic-to/libheif), zmniejszenie do 2048 px, JPEG
