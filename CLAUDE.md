@@ -30,7 +30,8 @@ Szczegóły wpisu otwierają się do czytania (bez pól, bez usuwania); „✎ E
 Nowy wpis bez nagrania otwiera się od razu w edycji.
 Grupa i dzień to widoki do czytania: wszystkie wpisy po kolei z nagraniami, tekstem, zdjęciami i dokumentami
 (pliki wczytywane przy przewinięciu, IntersectionObserver). Karta w grupie i nagłówek grupy prowadzą do widoku grupy,
-nagłówek dnia na liście do widoku dnia.
+nagłówek dnia na liście do widoku dnia. Pod nagłówkiem grupy (i przy każdej grupie w widoku dnia) jest ramka jak w pojedynczym wpisie
+(`groupContextHtml`): miejsce z adresem i mapką oraz pełna pogoda; w widoku dnia miejsce i mapka tylko przy zmianie miejsca.
 Lista: długie przytrzymanie karty (albo nagłówka grupy — cała grupa) włącza tryb zaznaczania; dotknięcia zaznaczają
 kolejne karty, pasek u góry ma „Usuń” i ✕. Usunięcie ukrywa wpisy i daje 6 s na „Cofnij”; dopiero potem
 `markDeleted` + `deleteFragment` (także po schowaniu aplikacji).

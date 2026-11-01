@@ -1,13 +1,13 @@
-import * as db from './db.js?v=202611011239';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011239';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011239';
-import * as whisper from './whisper.js?v=202611011239';
-import * as sync from './sync.js?v=202611011239';
-import * as pics from './photos.js?v=202611011239';
-import * as share from './share.js?v=202611011239';
-import { mapHtml, renderMaps } from './map.js?v=202611011239';
+import * as db from './db.js?v=202611011531';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011531';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, distanceM, GROUP_DIST_M } from './context.js?v=202611011531';
+import * as whisper from './whisper.js?v=202611011531';
+import * as sync from './sync.js?v=202611011531';
+import * as pics from './photos.js?v=202611011531';
+import * as share from './share.js?v=202611011531';
+import { mapHtml, renderMaps } from './map.js?v=202611011531';
 
-const APP_VERSION = '202611011239'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011531'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -753,7 +753,18 @@ let scrollTarget = null; // wpis, do którego przewinąć widok grupy/dnia
 let seqObserver = null;
 let seqIds = new Set(); // wpisy pokazane w widoku grupy/dnia (odświeżanie transkrypcji)
 
-const groupMapHtml = (group) => mapHtml(group.find((f) => f.location?.lat != null)?.location);
+// Ramka jak w pojedynczym wpisie: miejsce (adres, współrzędne, dokładność), mapka i pełna pogoda.
+// `withPlace: false` — tylko pogoda (w widoku dnia, gdy miejsce się nie zmieniło).
+function groupContextHtml(group, withPlace = true) {
+  const placed = group.find((f) => f.location?.lat != null) || group[0];
+  const withWeather = group.find((f) => f.location?.lat != null && hasWeather(f.weather)) || placed;
+  const html = (withPlace ? para(locationHtml(placed)) + mapHtml(placed.location) : '') + para(weatherHtml(withWeather));
+  return html ? `<section class="context">${html}</section>` : '';
+}
+
+const groupTimeText = (g) => (g.length > 1
+  ? `${timeFmt.format(g[0].createdAt)}–${timeFmt.format(g.at(-1).createdAt)}`
+  : timeFmt.format(g[0].createdAt));
 
 function groupHeadHtml(group) {
   const first = group[0];
@@ -761,9 +772,7 @@ function groupHeadHtml(group) {
   const time = group.length > 1
     ? `${timeFmt.format(first.createdAt)}–${timeFmt.format(group.at(-1).createdAt)}`
     : timeFmt.format(first.createdAt);
-  const w = group.find((f) => hasWeather(f.weather))?.weather;
-  return [time, placed && placeShort(placed.location), w && `${weatherShort(w)}, ${describeWeather(w).text.toLowerCase()}`]
-    .filter(Boolean).map(esc).join('<span class="sep">·</span>');
+  return [time, placed && placeShort(placed.location)].filter(Boolean).map(esc).join('<span class="sep">·</span>'); // pogoda w ramce pod spodem
 }
 
 function entryHtml(f) {
@@ -805,24 +814,24 @@ async function renderSequence(r) {
     return;
   }
   seqIds = new Set(shown.flat().map((f) => f.id));
-  // W widoku dnia mapka tylko przy zmianie miejsca (dalej niż 200 m od ostatniej pokazanej).
-  let lastMap = null;
-  const dayMap = (g) => {
+  // W widoku dnia miejsce i mapka tylko przy zmianie miejsca (dalej niż 200 m od ostatnio pokazanego); pogoda zawsze.
+  let lastPlace = null;
+  const dayContext = (g) => {
     const loc = g.find((f) => f.location?.lat != null)?.location;
-    if (!loc || (lastMap && distanceM(lastMap, loc) <= GROUP_DIST_M)) return '';
-    lastMap = loc;
-    return mapHtml(loc);
+    const changed = loc && !(lastPlace && distanceM(lastPlace, loc) <= GROUP_DIST_M);
+    if (changed) lastPlace = loc;
+    return groupContextHtml(g, Boolean(changed));
   };
   const ids = [...seqIds];
   const count = shown.flat().length;
   view.innerHTML = `
     <div class="detail-head"><div>
       <div class="detail-date">${esc(title)}</div>
-      <div class="detail-time">${r.view === 'group' ? groupHeadHtml(shown[0]) : esc(entriesLabel(count))}</div>
+      <div class="detail-time">${esc(r.view === 'group' ? `${groupTimeText(shown[0])} · ${entriesLabel(count)}` : entriesLabel(count))}</div>
     </div>${shareBtn()}</div>
-    ${r.view === 'group' ? groupMapHtml(shown[0]) : ''}
+    ${r.view === 'group' ? groupContextHtml(shown[0]) : ''}
     ${shown.map((g) => `<section class="seq-group">
-      ${r.view === 'day' ? `<h3 class="seq-group-head">${groupHeadHtml(g)}</h3>${dayMap(g)}` : ''}
+      ${r.view === 'day' ? `<h3 class="seq-group-head">${groupHeadHtml(g)}</h3>${dayContext(g)}` : ''}
       ${g.map(entryHtml).join('')}
     </section>`).join('')}`;
   seqObserver = new IntersectionObserver((items) => {
