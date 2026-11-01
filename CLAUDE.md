@@ -58,7 +58,8 @@ icons/                ikony (icon.svg jest źródłem; PNG generowane z niego)
 ```
 
 Model fragmentu (`fragments`): `id, createdAt, updatedAt, status ('recording'|'done'|'interrupted'),
-kind ('audio'|'text'), langs[], transcript, transcribedBy[], transcribing, notes, audioId, durationMs, location, weather, attachments[]`.
+kind ('audio'|'text'), appVersion, autoStopSec, langs[], transcript, transcribedBy[], transcribing, notes, audioId, durationMs, location, weather, attachments[]`.
+`appVersion` = wersja aplikacji przy tworzeniu wpisu (diagnostyka), `autoStopSec` = ustawienie końca po ciszy w tym nagraniu.
 `transcribedBy[]` = jak powstał tekst, w kolejności: `live-browser` (na żywo, przeglądarka), `live-device` (na żywo,
 `processLocally`), `live-whisper:<model>` (na żywo, Whisper), `whisper:<model>` (po nagraniu, cały plik; zastępuje
 wcześniejsze), `manual` (poprawka ręczna); opis w `describeMethods()` (`js/recorder.js`), widoczny w szczegółach i w raporcie MD.

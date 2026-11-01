@@ -1,10 +1,10 @@
-import * as db from './db.js?v=202611011000';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011000';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611011000';
-import * as whisper from './whisper.js?v=202611011000';
-import * as sync from './sync.js?v=202611011000';
+import * as db from './db.js?v=202611011006';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011006';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy } from './context.js?v=202611011006';
+import * as whisper from './whisper.js?v=202611011006';
+import * as sync from './sync.js?v=202611011006';
 
-const APP_VERSION = '202611011000'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011006'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -163,6 +163,7 @@ async function startRecording() {
     await db.putFragment({
       id, createdAt, updatedAt: createdAt, status: 'recording', kind: 'audio', langs: [lang],
       transcript: '', notes: '', audioId, durationMs: 0, location: null, weather: null, attachments: [],
+      appVersion: APP_VERSION, autoStopSec: autoStopSec(),
     });
   } catch (err) {
     if (rec) await session.stop().catch(() => {});
@@ -267,6 +268,7 @@ $('#text-entry').addEventListener('click', async () => {
   await db.putFragment({
     id, createdAt: now, updatedAt: now, status: 'done', kind: 'text', langs: [],
     transcript: '', notes: '', audioId: null, durationMs: 0, location: null, weather: null, attachments: [],
+    appVersion: APP_VERSION,
   });
   captureContext(id);
   focusNotes = true;
