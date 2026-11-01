@@ -44,6 +44,11 @@ grupy i w widoku dnia przy zmianie miejsca (> 200 m). Kafelki z tile.openstreetm
 bez internetu i bez cache mapka się chowa. Dotknięcie otwiera openstreetmap.org. Ikona udostępniania (widoki do czytania): Web Share z tekstem (data, godziny, miejsce, pogoda, transkrypcje, notatki)
 i zdjęciami (JPEG); tekst idzie też do schowka (Signal przy zdjęciach pomija tekst, WhatsApp nie). Bez Web Share — schowek. Ikona w nagłówku Ustawień udostępnia link do samej aplikacji. „✎ Edytuj” przy wpisie otwiera go w edycji; „Gotowe” wraca na to samo miejsce.
 
+Wyszukiwanie nad listą: transkrypcje, notatki, miejsca, adresy i nazwy załączników; bez względu na wielkość liter
+i polskie znaki (`fold()`), wszystkie słowa muszą wystąpić; karty pokazują fragment z podświetleniem (`snippetHtml()`).
+Skróty z ikony aplikacji (manifest `shortcuts`): „Nagraj” (`./?akcja=nagraj` — od razu startuje nagranie)
+i „Notatka” (`./?akcja=notatka`); ikony `icons/shortcut-*.png`.
+
 Można też utworzyć wpis bez nagrania (sama notatka/zdjęcia + lokalizacja i pogoda).
 Dane są lokalnie w przeglądarce (IndexedDB) i synchronizują się z prywatnym repo **`gchrupala/app-data`**
 (GitHub REST API, Contents; fine-grained token wpisany w Ustawieniach, trzymany w localStorage). Układ w repo

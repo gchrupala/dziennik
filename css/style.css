@@ -422,3 +422,9 @@ details.more p { margin: 8px 0; }
 .map-route text { fill: #fff; font: 700 10px system-ui, sans-serif; }
 .map.route { margin: 12px 0 4px; }
 .route-no { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-right: 6px; border-radius: 50%; background: var(--rec); color: #fff; font-size: 11px; font-weight: 700; vertical-align: 1px; }
+
+/* ---------- wyszukiwanie ---------- */
+.search { margin: 18px 0 0; }
+.search input { width: 100%; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; }
+.search input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.card-text mark { background: color-mix(in srgb, var(--accent) 25%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }

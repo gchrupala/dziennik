@@ -1,13 +1,13 @@
-import * as db from './db.js?v=202611011542';
-import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011542';
-import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, samePlace } from './context.js?v=202611011542';
-import * as whisper from './whisper.js?v=202611011542';
-import * as sync from './sync.js?v=202611011542';
-import * as pics from './photos.js?v=202611011542';
-import * as share from './share.js?v=202611011542';
-import { mapHtml, routeMapHtml, renderMaps } from './map.js?v=202611011542';
+import * as db from './db.js?v=202611011551';
+import { RecordingSession, LANGS, speechSupported, offlineSpeech, isAndroid, METHOD, describeMethods, addMethod } from './recorder.js?v=202611011551';
+import { captureContext, backfillContext, describeWeather, windDir, isBusy, groupFragments, samePlace } from './context.js?v=202611011551';
+import * as whisper from './whisper.js?v=202611011551';
+import * as sync from './sync.js?v=202611011551';
+import * as pics from './photos.js?v=202611011551';
+import * as share from './share.js?v=202611011551';
+import { mapHtml, routeMapHtml, renderMaps } from './map.js?v=202611011551';
 
-const APP_VERSION = '202611011542'; // podbijaj skryptem tools/bump-version.sh
+const APP_VERSION = '202611011551'; // podbijaj skryptem tools/bump-version.sh
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -109,7 +109,7 @@ function setRecordingUI(on) {
   document.body.classList.toggle('recording', on);
   $('#rec-btn').setAttribute('aria-label', on ? 'Zakończ nagrywanie' : 'Nagrywaj');
   for (const sel of ['#rec-meta', '#rec-chips', '#live']) $(sel).hidden = !on;
-  for (const sel of ['#rec-hint', '#text-entry', '#list']) $(sel).hidden = on;
+  for (const sel of ['#rec-hint', '#text-entry', '#list', '#search-box']) $(sel).hidden = on;
   if (!on) $('#speech-status').hidden = true;
   if (!on) $('#silence-note').hidden = true;
 }
@@ -317,6 +317,56 @@ const entriesLabel = (n) => {
   return `${n} ${n === 1 ? 'wpis' : few ? 'wpisy' : 'wpisów'}`;
 };
 
+// ---------- wyszukiwanie: transkrypcje, notatki, miejsca, nazwy załączników ----------
+// Bez względu na wielkość liter i polskie znaki („zolw” znajdzie „żółw”); muszą wystąpić wszystkie słowa.
+// `fold` zamienia każdy znak (jednostkę UTF-16) na jeden znak, więc pozycje w tekście i w wersji „złożonej” się zgadzają.
+let searchWords = [];
+const fold = (s) => Array.from(String(s || '').split(''), (c) => {
+  const l = c.toLowerCase();
+  return l === 'ł' ? 'l' : l.normalize('NFD')[0];
+}).join('');
+const searchText = (f) => [f.transcript, f.notes, f.location?.place, f.location?.address, ...(f.attachments || []).map((a) => a.name)]
+  .filter(Boolean).join('\n');
+const matchesSearch = (f) => {
+  const t = fold(searchText(f));
+  return searchWords.every((w) => t.includes(w));
+};
+
+// Fragment tekstu wokół pierwszego trafienia, z podświetlonymi słowami.
+function snippetHtml(f) {
+  const text = [f.transcript, f.notes].find((t) => t && searchWords.some((w) => fold(t).includes(w))) || f.transcript || f.notes;
+  const folded = fold(text);
+  const first = Math.min(...searchWords.map((w) => folded.indexOf(w)).filter((i) => i >= 0));
+  const start = Number.isFinite(first) ? Math.max(0, first - 50) : 0;
+  const end = Math.min(text.length, start + 220);
+  const marks = new Array(end - start).fill(false);
+  for (const w of searchWords) {
+    for (let i = folded.indexOf(w, start); i >= 0 && i < end; i = folded.indexOf(w, i + 1)) {
+      for (let k = i; k < Math.min(end, i + w.length); k++) marks[k - start] = true;
+    }
+  }
+  let html = start > 0 ? '…' : '';
+  for (let i = 0; i < marks.length;) {
+    let j = i;
+    while (j < marks.length && marks[j] === marks[i]) j++;
+    const part = esc(text.slice(start + i, start + j));
+    html += marks[i] ? `<mark>${part}</mark>` : part;
+    i = j;
+  }
+  return html + (end < text.length ? '…' : '');
+}
+
+{
+  let t;
+  $('#search').addEventListener('input', (e) => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      searchWords = fold(e.target.value).split(/\s+/).filter(Boolean);
+      renderList();
+    }, 150);
+  });
+}
+
 // ---------- zaznaczanie (długie przytrzymanie karty lub nagłówka grupy) i usuwanie z „Cofnij” ----------
 const selected = new Set();
 const hiddenIds = new Set(); // usunięte, ale jeszcze do cofnięcia
@@ -447,16 +497,20 @@ function cardHtml(f, groupHref = null) {
   ].filter(Boolean);
   return `<a class="card${selected.has(f.id) ? ' selected' : ''}" data-id="${esc(f.id)}" href="${groupHref || `#/f/${encodeURIComponent(f.id)}`}">
     <div class="card-meta">${meta.map(esc).join('<span class="sep">·</span>')}</div>
-    <p class="card-text${text ? '' : ' muted'}">${text ? esc(text) : '(bez tekstu)'}</p>
+    <p class="card-text${text ? '' : ' muted'}">${searchWords.length && text ? snippetHtml(f) : text ? esc(text) : '(bez tekstu)'}</p>
     ${badges.length ? `<div class="card-badges">${badges.map((b) => `<span>${esc(b)}</span>`).join('')}</div>` : ''}
   </a>`;
 }
 
 async function renderList() {
-  const items = (await db.getAllFragments()).filter((f) => !hiddenIds.has(f.id));
+  const all = (await db.getAllFragments()).filter((f) => !hiddenIds.has(f.id));
+  const items = searchWords.length ? all.filter(matchesSearch) : all;
   const list = $('#list');
+  $('#search-box').hidden = !all.length || Boolean(rec);
   if (!items.length) {
-    list.innerHTML = '<p class="empty">Nie ma jeszcze żadnych wpisów.</p>';
+    list.innerHTML = all.length
+      ? `<p class="empty">Nic nie znaleziono dla „${esc($('#search').value.trim())}”.</p>`
+      : '<p class="empty">Nie ma jeszcze żadnych wpisów.</p>';
     return;
   }
   let html = '';
@@ -1330,7 +1384,12 @@ async function init() {
   }
   redo.forEach((id) => transcribeFragment(id));
   sync.startAuto();
+  // Skróty z ikony aplikacji (manifest: „Nagraj”, „Notatka”): ./?akcja=nagraj | notatka
+  const action = new URLSearchParams(location.search).get('akcja');
+  if (action) history.replaceState(null, '', location.pathname + (location.hash || '#/'));
   await render();
+  if (action === 'nagraj' && route().view === 'list') startRecording();
+  else if (action === 'notatka') $('#text-entry').click();
   backfillContext();
   pics.ensurePreviews(); // podglądy JPEG zdjęć HEIC (biblioteka pobiera się raz, potem z cache)
   window.addEventListener('online', () => { backfillContext(); pics.ensurePreviews(); });

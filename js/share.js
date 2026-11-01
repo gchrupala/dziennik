@@ -1,7 +1,7 @@
 // Udostępnianie widoków do czytania: tekst (data, godziny, miejsce, pogoda, transkrypcje, notatki) i zdjęcia (JPEG)
 // jednym dotknięciem. Tekst trafia też do schowka — niektóre aplikacje (np. Signal) przy zdjęciach go pomijają.
-import { describeWeather } from './context.js?v=202611011542';
-import * as pics from './photos.js?v=202611011542';
+import { describeWeather } from './context.js?v=202611011551';
+import * as pics from './photos.js?v=202611011551';
 
 const MAX_FILES = 20;
 const dayFmt = new Intl.DateTimeFormat('pl-PL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
